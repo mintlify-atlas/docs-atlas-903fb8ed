@@ -1,0 +1,395 @@
+---
+title: Level Progression
+description: Dynamic difficulty scaling with the treesForLevel algorithm, level configuration, and high score tracking
+---
+
+## Overview
+
+Reforestation Saga features an infinite progression system where difficulty increases through more trees required, faster planet rotation, and unpredictable rotation patterns.
+
+## Trees Per Level Algorithm
+
+The `treesForLevel` function calculates how many trees players must plant at each level using a cycle-based formula.
+
+### Core Algorithm
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+func treesForLevel(_ level: Int) -> Int {
+    let base = 3
+    let cycle = (level - 1) / 5
+    let positionInCycle = (level - 1) % 5
+    return base + cycle + positionInCycle
+}
+```
+
+### Algorithm Breakdown
+
+<Steps>
+  <Step title="Base Value">
+    Every level starts with a base of **3 trees**.
+  </Step>
+
+  <Step title="Cycle Calculation">
+    Divide the level by 5 to determine which "cycle" the player is in.
+    - Levels 1-5: Cycle 0
+    - Levels 6-10: Cycle 1
+    - Levels 11-15: Cycle 2
+    - And so on...
+  </Step>
+
+  <Step title="Position in Cycle">
+    Use modulo 5 to find the position within the current cycle (0-4).
+  </Step>
+
+  <Step title="Final Calculation">
+    Add base + cycle + position to get the total trees required.
+  </Step>
+</Steps>
+
+### Progression Table
+
+<Tabs>
+  <Tab title="Levels 1-10">
+    | Level | Cycle | Position | Trees Required |
+    |-------|-------|----------|----------------|
+    | 1     | 0     | 0        | 3              |
+    | 2     | 0     | 1        | 4              |
+    | 3     | 0     | 2        | 5              |
+    | 4     | 0     | 3        | 6              |
+    | 5     | 0     | 4        | 7              |
+    | 6     | 1     | 0        | 4              |
+    | 7     | 1     | 1        | 5              |
+    | 8     | 1     | 2        | 6              |
+    | 9     | 1     | 3        | 7              |
+    | 10    | 1     | 4        | 8              |
+  </Tab>
+  <Tab title="Levels 11-20">
+    | Level | Cycle | Position | Trees Required |
+    |-------|-------|----------|----------------|
+    | 11    | 2     | 0        | 5              |
+    | 12    | 2     | 1        | 6              |
+    | 13    | 2     | 2        | 7              |
+    | 14    | 2     | 3        | 8              |
+    | 15    | 2     | 4        | 9              |
+    | 16    | 3     | 0        | 6              |
+    | 17    | 3     | 1        | 7              |
+    | 18    | 3     | 2        | 8              |
+    | 19    | 3     | 3        | 9              |
+    | 20    | 3     | 4        | 10             |
+  </Tab>
+</Tabs>
+
+<Info>
+  The first level of each new cycle has fewer trees than the last level of the previous cycle, creating a wave-like difficulty pattern that gives players brief respites.
+</Info>
+
+## Rotation Difficulty Scaling
+
+Rotation speed and direction change based on the current level.
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+let rotationDuration: Double
+let rotateLeft: Bool
+
+switch currentLevel {
+case 1...5:
+    rotationDuration = 4
+    rotateLeft = false
+case 6...10:
+    rotationDuration = 3
+    rotateLeft = Bool.random()
+default:
+    rotationDuration = Double.random(in: 1.5...4)
+    rotateLeft = Bool.random()
+}
+```
+
+### Difficulty Tiers
+
+<CardGroup cols={3}>
+  <Card title="Beginner (1-5)" icon="seedling">
+    - **Speed**: 4 seconds/rotation
+    - **Direction**: Always right
+    - **Predictability**: High
+  </Card>
+  <Card title="Intermediate (6-10)" icon="tree">
+    - **Speed**: 3 seconds/rotation
+    - **Direction**: Random
+    - **Predictability**: Medium
+  </Card>
+  <Card title="Advanced (11+)" icon="trees">
+    - **Speed**: 1.5-4 seconds (random)
+    - **Direction**: Random
+    - **Predictability**: Low
+  </Card>
+</CardGroup>
+
+## Level Configuration
+
+Each level is configured with specific parameters when initialized.
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+func setupScene() {
+    if let oldScene = scene {
+        oldScene.removeAllActions()
+        oldScene.removeAllChildren()
+        oldScene.removeFromParent()
+    }
+    
+    reason = "laut"
+    let newTrees = treesForLevel(currentLevel)
+    self.treesNeeded = newTrees
+    let newScene = GameScene(size: UIScreen.main.bounds.size)
+    newScene.scaleMode = .resizeFill
+    
+    // ... setup callbacks ...
+    
+    let rotationDuration: Double
+    let rotateLeft: Bool
+
+    switch currentLevel {
+    case 1...5:
+        rotationDuration = 4
+        rotateLeft = false
+    case 6...10:
+        rotationDuration = 3
+        rotateLeft = Bool.random()
+    default:
+        rotationDuration = Double.random(in: 1.5...4)
+        rotateLeft = Bool.random()
+    }
+
+    newScene.configureLevel(
+        treesNeeded: treesNeeded,
+        rotationDuration: rotationDuration,
+        rotateLeft: rotateLeft
+    )
+
+    self.treesRemaining = treesNeeded
+    self.scene = newScene
+    self.sceneID = UUID()
+    resumeGame()
+}
+```
+
+<Tip>
+  The `sceneID` is updated with a new UUID to force SwiftUI to recreate the SpriteView, ensuring clean level transitions.
+</Tip>
+
+## High Score Tracking
+
+The game tracks the highest level reached using UserDefaults for persistence.
+
+### GameData ObservableObject
+
+```swift ~/workspace/source/ReforestationSaga/ContentView.swift
+class GameData: ObservableObject {
+    @Published var highestLevel: Int = UserDefaults.standard.savedHighestLevel
+}
+```
+
+### UserDefaults Extension
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+extension UserDefaults {
+    private enum Keys {
+        static let highestLevel = "highestLevel"
+    }
+
+    var savedHighestLevel: Int {
+        get { integer(forKey: Keys.highestLevel) }
+        set { set(newValue, forKey: Keys.highestLevel) }
+    }
+}
+```
+
+### Updating High Score
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+newScene.onTreeHit = {
+    treesRemaining -= 1
+    if treesRemaining <= 0 {
+        showLevelClearPopup = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            showLevelClearPopup = false
+            currentLevel += 1
+
+            if currentLevel - 1 > gameData.highestLevel {
+                gameData.highestLevel = currentLevel - 1
+                UserDefaults.standard.savedHighestLevel = gameData.highestLevel
+            }
+            setupScene()
+        }
+    }
+}
+```
+
+<Accordion title="Why currentLevel - 1?">
+  When completing level X, `currentLevel` is incremented to X+1 for the next level. The high score represents the highest **completed** level, so we save `currentLevel - 1`.
+
+  Example:
+  - Player completes level 5
+  - `currentLevel` becomes 6 (for next level)
+  - High score saved as 5 (completed level)
+</Accordion>
+
+## Level Completion Flow
+
+<Steps>
+  <Step title="Check Remaining Trees">
+    After each successful tree plant, decrement `treesRemaining`.
+
+    ```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+    newScene.onTreeHit = {
+        treesRemaining -= 1
+    ```
+  </Step>
+
+  <Step title="Trigger Level Clear">
+    When trees remaining reaches zero, show completion popup.
+
+    ```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+    if treesRemaining <= 0 {
+        showLevelClearPopup = true
+    ```
+  </Step>
+
+  <Step title="Display Popup">
+    Show success animation for 1.2 seconds.
+
+    ```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+        showLevelClearPopup = false
+        currentLevel += 1
+    ```
+  </Step>
+
+  <Step title="Update High Score">
+    Save new high score if current level exceeds previous record.
+
+    ```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+    if currentLevel - 1 > gameData.highestLevel {
+        gameData.highestLevel = currentLevel - 1
+        UserDefaults.standard.savedHighestLevel = gameData.highestLevel
+    }
+    ```
+  </Step>
+
+  <Step title="Setup Next Level">
+    Initialize the next level with new parameters.
+
+    ```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+    setupScene()
+    ```
+  </Step>
+</Steps>
+
+## Level Reset on Failure
+
+When players fail, they return to level 1 but keep their high score.
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+if showMissionFailedPopup {
+    MissionFailedPopUp(
+        currentLevel: $currentLevel,
+        reason: $reason,
+        isNewHighScore: currentLevel - 1 >= gameData.highestLevel,
+        onNextMission: {
+            currentLevel = 1
+            gameData.highestLevel = UserDefaults.standard.savedHighestLevel
+            showMissionFailedPopup = false
+            setupScene()
+            showInitialBlinkAlert = true
+        }
+    )
+}
+```
+
+<Warning>
+  The level is reset to **1** on failure, not to a checkpoint. This creates a high-stakes roguelike experience where mistakes are costly.
+</Warning>
+
+## Scene-Level Configuration
+
+The GameScene accepts level configuration through its `configureLevel` method.
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameScene.swift
+func configureLevel(
+    treesNeeded: Int,
+    rotationDuration: Double,
+    rotateLeft: Bool
+) {
+    treesShot = 0
+    treesTarget = treesNeeded
+    resetNeedles()
+    setupTreeIndicator()
+    treeIndicator?.isHidden = false
+
+    circle.removeAllActions()
+
+    let angle: CGFloat = rotateLeft ? -.pi : .pi
+    let rotate = SKAction.rotate(byAngle: angle, duration: rotationDuration)
+    let forever = SKAction.repeatForever(rotate)
+    circle.run(forever)
+}
+```
+
+### Parameter Effects
+
+<CardGroup cols={2}>
+  <Card title="treesNeeded" icon="hashtag">
+    Sets the `treesTarget` for level completion tracking.
+  </Card>
+  <Card title="rotationDuration" icon="clock">
+    Controls how fast the planet rotates (seconds per full rotation).
+  </Card>
+  <Card title="rotateLeft" icon="rotate-left">
+    Determines rotation direction (true = counterclockwise, false = clockwise).
+  </Card>
+  <Card title="resetNeedles()" icon="broom">
+    Clears all previously planted trees from the planet.
+  </Card>
+</CardGroup>
+
+## Progress Tracking
+
+### Remaining Trees Display
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+BarView(
+    treesRemaining: treesRemaining,
+    totalPollution: treesNeeded)
+```
+
+### Scene-Level Tracking
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameScene.swift
+var remainingTrees: Int {
+    return max(treesTarget - treesShot, 0)
+}
+```
+
+<Note>
+  Both the GameView and GameScene track progress independently. GameView manages UI state while GameScene tracks gameplay state.
+</Note>
+
+## Infinite Progression
+
+The game has no maximum level - difficulty continues to scale indefinitely.
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+default:
+    rotationDuration = Double.random(in: 1.5...4)
+    rotateLeft = Bool.random()
+```
+
+For levels 11 and beyond:
+- Trees required follows the cycle formula (grows infinitely)
+- Rotation speed is random between 1.5-4 seconds
+- Rotation direction is random
+- No upper limit on progression
+
+<Tip>
+  The combination of increasing tree requirements and random rotation creates exponentially increasing difficulty, making high-level runs extremely challenging.
+</Tip>

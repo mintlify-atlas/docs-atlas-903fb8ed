@@ -1,0 +1,475 @@
+---
+title: 'UI Components'
+description: 'Explore the SwiftUI components that make up the game interface including BarView, LevelSoundView, and popup overlays'
+---
+
+## Overview
+
+Reforestation Saga uses SwiftUI components overlaid on top of the SpriteKit game scene to provide player feedback, level information, and interactive controls.
+
+## BarView Component
+
+The pollution indicator bar shows remaining trees and mission progress.
+
+```swift BarView.swift
+struct BarView: View {
+    var treesRemaining: Int
+    var totalPollution: Int
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Pollution Indicator")
+                .font(Font.custom("Gugi", size: 11))
+                .multilineTextAlignment(.center)
+                .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                .padding(.bottom, 8)
+            
+            ZStack {
+                Image("pollution")
+                    .resizable(capInsets: EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8), resizingMode: .stretch)
+                    .frame(width: CGFloat(16 * totalPollution), height: 31)
+                
+                HStack(spacing: 2) {
+                    ForEach((0..<totalPollution).reversed(), id: \.self) { index in
+                        Rectangle()
+                            .frame(width: 11.94, height: 19.52)
+                            .foregroundColor(.clear)
+                            .background(
+                                index < (totalPollution - treesRemaining) ?
+                                Color(red: 0.99, green: 0.56, blue: 0.13).opacity(0.2) : // cleaned
+                                Color(red: 1, green: 0.18, blue: 0.18) // still polluted
+                            )
+                            .cornerRadius(1.58)
+                    }
+                }
+            }
+            
+            Text("Trees Remaining: \(treesRemaining)")
+                .font(Font.custom("Gugi", size: 11))
+                .multilineTextAlignment(.center)
+                .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                .padding(.top, 12)
+        }
+    }
+}
+```
+
+<Steps>
+  <Step title="Header Label">
+    Displays "Pollution Indicator" title
+  </Step>
+  
+  <Step title="Background Image">
+    Stretchable pollution bar image scales with total trees needed
+  </Step>
+  
+  <Step title="Pollution Bars">
+    Individual rectangles change color as trees are planted
+  </Step>
+  
+  <Step title="Counter Text">
+    Shows exact number of trees remaining
+  </Step>
+</Steps>
+
+### Dynamic Bar Sizing
+
+The pollution bar width adjusts based on the total number of trees needed.
+
+```swift BarView.swift
+Image("pollution")
+    .resizable(capInsets: EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8), resizingMode: .stretch)
+    .frame(width: CGFloat(16 * totalPollution), height: 31)
+```
+
+<Info>
+Each tree requires 16 points of width, so a level with 5 trees creates an 80-point wide bar.
+</Info>
+
+### Color Logic
+
+Rectangles change color from red (polluted) to orange (cleaned) as trees are planted.
+
+```swift BarView.swift
+.background(
+    index < (totalPollution - treesRemaining) ?
+    Color(red: 0.99, green: 0.56, blue: 0.13).opacity(0.2) : // cleaned
+    Color(red: 1, green: 0.18, blue: 0.18) // still polluted
+)
+```
+
+<CardGroup cols={2}>
+  <Card title="Polluted State" icon="smog">
+    **RGB**: (1, 0.18, 0.18)
+    Full red color for unplanted trees
+  </Card>
+  
+  <Card title="Cleaned State" icon="leaf">
+    **RGB**: (0.99, 0.56, 0.13)
+    Orange with 20% opacity for planted trees
+  </Card>
+</CardGroup>
+
+## LevelSoundView Component
+
+Displays current level, highest level, and sound toggle in the top-right corner.
+
+```swift LevelSoundView.swift
+struct LevelSoundView: View {
+    @Binding var isMuted: Bool
+    @EnvironmentObject var gameData: GameData
+    var currentLevel: Int
+    var scene: GameScene?
+    
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            Text("Highest Level: \(gameData.highestLevel)")
+                .font(Font.custom("Gugi", size: 11))
+                .multilineTextAlignment(.center)
+                .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                .padding(.bottom, 8)
+           
+            ZStack {
+                Image("box")
+                    .resizable()
+                    .frame(width: 100, height: 40)
+                Text("LEVEL \(currentLevel)")
+                    .font(Font.custom("Gugi", size: 14))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                    .padding(.bottom, 8)
+            }
+            .offset(x: 4)
+            
+            Button {
+                isMuted.toggle()
+                if isMuted {
+                    GameMusicManager.shared.pauseMusic()
+                } else {
+                    GameMusicManager.shared.resumeMusic()
+                }
+            } label: {
+                Image(isMuted ? "soundoff" :"sound")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 35, height: 35)
+                    .padding(.top, -6)
+                    .offset(x: 4)
+            }
+        }
+    }
+}
+```
+
+### Sound Control
+
+The sound button toggles between muted and unmuted states, controlling background music.
+
+```swift LevelSoundView.swift
+Button {
+    isMuted.toggle()
+    if isMuted {
+        GameMusicManager.shared.pauseMusic()
+    } else {
+        GameMusicManager.shared.resumeMusic()
+    }
+} label: {
+    Image(isMuted ? "soundoff" :"sound")
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 35, height: 35)
+}
+```
+
+<Tip>
+The button image switches between "sound" and "soundoff" assets based on the muted state.
+</Tip>
+
+## UI Layout in GameView
+
+The UI components are positioned using SwiftUI overlays on the game scene.
+
+```swift GameView.swift
+VStack {
+    HStack {
+        // Top-left corner
+        BarView(
+            treesRemaining: treesRemaining,
+            totalPollution: treesNeeded)
+
+        Spacer()
+
+        // Top-right corner
+        LevelSoundView(
+            isMuted: $isMuted,
+            currentLevel: currentLevel,
+            scene: scene
+        )
+        .offset(y: 8)
+    }
+    .padding(.horizontal, 20)
+
+    Spacer()
+}
+```
+
+<Steps>
+  <Step title="VStack Container">
+    Main vertical stack for top alignment
+  </Step>
+  
+  <Step title="HStack for Top Bar">
+    Horizontal layout with BarView on left, LevelSoundView on right
+  </Step>
+  
+  <Step title="Spacer for Separation">
+    Pushes left and right components to edges
+  </Step>
+  
+  <Step title="Bottom Spacer">
+    Keeps top bar at top of screen
+  </Step>
+</Steps>
+
+## Level Complete Popup
+
+Shows a brief celebration message when a level is completed.
+
+```swift LevelCompletePopUp.swift
+struct LevelCompletePopUp: View {
+    var level: Int
+    
+    var body: some View {
+        ZStack {
+            Image("questbox")
+                .resizable()
+                .frame(width: 350, height: 80)
+            
+            Text("Level \(level) Complete!")
+                .font(Font.custom("Gugi", size: 35))
+                .multilineTextAlignment(.center)
+                .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                .frame(width: 306, alignment: .top)
+        }
+    }
+}
+```
+
+### Popup Display Logic
+
+```swift GameView.swift
+if showLevelClearPopup {
+    LevelCompletePopUp(level: currentLevel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transition(.scale)
+        .zIndex(1)
+}
+```
+
+<Info>
+The popup appears with a scale transition and automatically dismisses after 1.2 seconds before advancing to the next level.
+</Info>
+
+## Mission Failed Popup
+
+Displays failure information and retry button when the player hits ocean or another tree.
+
+```swift MissionFailedPopUp.swift
+struct MissionFailedPopUp: View {
+    @EnvironmentObject var gameData: GameData
+    @Binding var currentLevel: Int
+    @Binding var reason: String
+    var isNewHighScore: Bool
+    var onNextMission: () -> Void
+    
+    var body: some View {
+        VStack {
+            ZStack {
+                Image("missionfailedbox")
+                    .resizable()
+                    .frame(width: 329, height: 160)
+
+                Text(reason == "laut" ? "The Tree floats away..." : "Careful! Tree Crash!")
+                    .font(Font.custom("Gugi", size: 26))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color(red: 1, green: 0.42, blue: 0.36))
+                    .frame(width: 306, alignment: .top)
+                    .padding(.top, 15 + (-40))
+                    .padding(.bottom, 47)
+
+                Text("MISSION FAILED")
+                    .font(Font.custom("Genos", size: 20.58992).weight(.regular))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color(red: 1, green: 0.42, blue: 0.36))
+                    .padding(.top, 75 + (-40))
+                    .padding(.bottom, 37)
+
+                if isNewHighScore {
+                    Text("New Highest Level: \(gameData.highestLevel)")
+                        .font(Font.custom("Genos", size: 20.58992).weight(.medium))
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                        .padding(.top, 140 + (-35))
+                        .padding(.bottom, 37)
+                } else {
+                    Text("Your Level: \(currentLevel - 1)")
+                        .font(Font.custom("Genos", size: 20.58992).weight(.medium))
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                        .padding(.top, 140 + (-35))
+                        .padding(.bottom, 37)
+                }
+            }
+
+            Button(action: { onNextMission() }) {
+                ZStack {
+                    Image("buttonretry")
+                    Text("TRY AGAIN")
+                        .font(Font.custom("Gugi", size: 25.74193))
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(Color(red: 0.02, green: 0.02, blue: 0.18))
+                        .padding(.bottom, 14)
+                }
+            }
+            .padding(.top, 20)
+        }
+    }
+}
+```
+
+### Dynamic Failure Messages
+
+The message changes based on how the player failed:
+
+<CardGroup cols={2}>
+  <Card title="Ocean Hit (laut)" icon="water">
+    "The Tree floats away..."
+  </Card>
+  
+  <Card title="Tree Hit (pohon)" icon="tree">
+    "Careful! Tree Crash!"
+  </Card>
+</CardGroup>
+
+### High Score Display
+
+```swift MissionFailedPopUp.swift
+if isNewHighScore {
+    Text("New Highest Level: \(gameData.highestLevel)")
+        // styling...
+} else {
+    Text("Your Level: \(currentLevel - 1)")
+        // styling...
+}
+```
+
+<Accordion title="High Score Logic">
+  The popup shows "New Highest Level" if the player reached a new personal best, otherwise shows "Your Level" with the final level achieved.
+</Accordion>
+
+## Blink Alert
+
+Displays an initial warning before the first tree is planted.
+
+```swift BlinkAlert.swift
+struct BlinkAlert: View {
+    var body: some View {
+        VStack {
+            ZStack {
+                Image("initialalert")
+                    .resizable()
+                    .frame(width: 350, height: 41)
+                
+                Text("Trees can not be planted on the ocean")
+                  .font(Font.custom("Genos", size: 18).weight(.medium))
+                  .multilineTextAlignment(.center)
+                  .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+                  .frame(width: 350, alignment: .top)
+                  .padding(.bottom, 10)
+            }
+        }
+    }
+}
+```
+
+### Initial Alert Display
+
+```swift GameView.swift
+if showInitialBlinkAlert {
+    BlinkAlert()
+        .transition(.opacity)
+        .zIndex(3)
+        .padding(.top, 220)
+}
+```
+
+<Tip>
+The alert disappears when the player blinks for the first time, triggering the first tree to be planted.
+</Tip>
+
+## Popup Animations
+
+All popups use SwiftUI animations for smooth appearance and dismissal.
+
+```swift GameView.swift
+.animation(.easeInOut(duration: 0.3), value: showMissionFailedPopup)
+.animation(.easeInOut(duration: 0.3), value: showLevelClearPopup)
+.animation(.easeInOut(duration: 0.3), value: showInitialBlinkAlert)
+```
+
+## Z-Index Layering
+
+Components are layered using `zIndex` to ensure proper overlap.
+
+| Component | Z-Index | Position |
+|-----------|---------|----------|
+| Game Scene | 0 (default) | Background |
+| Level Complete | 1 | Above scene |
+| Mission Failed | 2 | Above level complete |
+| Blink Alert | 3 | Top-most layer |
+
+## Custom Fonts
+
+The game uses two custom fonts for consistent theming:
+
+<CardGroup cols={2}>
+  <Card title="Gugi Font" icon="font">
+    Used for headings, buttons, and important text
+  </Card>
+  
+  <Card title="Genos Font" icon="text">
+    Used for body text and subtitles
+  </Card>
+</CardGroup>
+
+## Color Scheme
+
+Consistent colors create visual cohesion across components:
+
+```swift
+// Cream/beige text
+Color(red: 0.94, green: 0.84, blue: 0.65)
+
+// Red error/failure
+Color(red: 1, green: 0.42, blue: 0.36)
+
+// Pollution red
+Color(red: 1, green: 0.18, blue: 0.18)
+
+// Cleaned orange
+Color(red: 0.99, green: 0.56, blue: 0.13)
+
+// Dark button text
+Color(red: 0.02, green: 0.02, blue: 0.18)
+```
+
+## Best Practices
+
+- Use `@Binding` for mutable state passed to child components
+- Apply consistent spacing (0, 8, 12, 20 points) across components
+- Use custom fonts throughout for unified visual identity
+- Layer popups with appropriate `zIndex` values
+- Animate state changes with easeInOut for smooth transitions
+- Provide clear visual feedback for all player actions
+- Use contrasting colors for different states (polluted vs cleaned)
+- Include both new high score and current level messages for player motivation

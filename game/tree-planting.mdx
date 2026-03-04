@@ -1,0 +1,314 @@
+---
+title: 'Tree Planting'
+description: 'Understand the tree planting mechanics including needle shooting, collision detection, and tree placement on the rotating planet'
+---
+
+## Overview
+
+Tree planting is the core interaction in Reforestation Saga. Players blink to shoot tree needles that stick to the planet's surface, avoiding oceans and other trees.
+
+## Needle Shooting
+
+The `shootNeedle` method handles the entire tree planting sequence from shooting to collision detection.
+
+```swift GameScene.swift
+func shootNeedle() {
+    guard remainingTrees > 0 else { return }
+    guard isFail == false else { return }
+    GameMusicManager.shared.playSoundEffect(filename: "TreeSFX")
+    let needle = SKSpriteNode(imageNamed: "pohonnew")
+    treeIndicator?.isHidden = true
+    let needleLength: CGFloat = 70
+
+    needle.size = CGSize(width: 30, height: needleLength)
+
+    // Starting position (above the circle) - same as indicator
+    let startY = circle.position.y + 300
+    needle.position = CGPoint(x: circle.position.x, y: startY)
+    needle.zRotation = 0
+    addChild(needle)
+
+    // Target: point on the outer surface of the circle
+    let circleRadius: CGFloat = 118
+    let targetPoint = CGPoint(
+        x: circle.position.x,
+        y: circle.position.y + circleRadius + needleLength / 2
+    )
+
+    let move = SKAction.move(to: targetPoint, duration: 0.18)
+    let sequence = SKAction.sequence([move, stickToCircle])
+    needle.run(sequence)
+}
+```
+
+<Steps>
+  <Step title="Guard Checks">
+    Verify trees remaining and game is not failed
+  </Step>
+  
+  <Step title="Create Needle">
+    Spawn tree sprite at starting position above the planet
+  </Step>
+  
+  <Step title="Animate Movement">
+    Move needle to planet surface over 0.18 seconds
+  </Step>
+  
+  <Step title="Attach to Planet">
+    Execute collision detection and stick logic
+  </Step>
+</Steps>
+
+## Tree Indicator
+
+A floating tree sprite shows players where the next tree will be planted.
+
+```swift GameScene.swift
+private func setupTreeIndicator() {
+    treeIndicator?.removeFromParent()
+
+    // Create new tree indicator
+    treeIndicator = SKSpriteNode(imageNamed: "pohonnew")
+    guard let indicator = treeIndicator else { return }
+
+    indicator.size = CGSize(width: 30, height: 70)
+
+    let startY = circle.position.y + 300
+    indicator.position = CGPoint(x: circle.position.x, y: startY)
+    indicator.zRotation = 0
+    indicator.alpha = 0.7
+    indicator.name = "treeIndicator"
+
+    addChild(indicator)
+
+    let floatUp = SKAction.moveBy(x: 0, y: 10, duration: 1.0)
+    let floatDown = SKAction.moveBy(x: 0, y: -10, duration: 1.0)
+    let floatSequence = SKAction.sequence([floatUp, floatDown])
+    let floatForever = SKAction.repeatForever(floatSequence)
+
+    indicator.run(floatForever)
+}
+```
+
+<Info>
+The tree indicator floats up and down continuously with semi-transparent alpha (0.7) to clearly show it's a preview, not an actual tree.
+</Info>
+
+## Collision Detection
+
+When a needle reaches the planet, extensive collision detection determines if it can be placed.
+
+### Ocean Collision (Fail Zones)
+
+```swift GameScene.swift
+let stickToCircle = SKAction.run {
+    needle.removeAllActions()
+
+    let relativePosition = self.convert(
+        needle.position,
+        to: self.needleContainer
+    )
+
+    // Check if in fail zone
+    let failZoneNames = [
+        "failZone-1", "failZone-2", "failZone-3", "failZone-4",
+    ]
+
+    for zoneName in failZoneNames {
+        if let failZone = self.circle.childNode(withName: zoneName),
+            failZone.contains(relativePosition)
+        {
+            let splash = SKSpriteNode(imageNamed: "splash")
+            splash.position = CGPoint(
+                x: needle.position.x,
+                y: needle.position.y - 15
+            )
+            splash.setScale(0.11)
+            self.addChild(splash)
+
+            needle.removeAllChildren()
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            self.isFail = true
+            self.onFailZoneHit?()
+            return
+        }
+    }
+}
+```
+
+<Warning>
+If a tree lands in ocean (fail zone), the mission immediately fails with splash effect and haptic feedback.
+</Warning>
+
+### Tree-to-Tree Collision
+
+```swift GameScene.swift
+// Check collision with already planted trees
+for child in self.needleContainer.children {
+    if child.name == "treeZone" {
+        let distance = hypot(
+            child.position.x - relativePosition.x,
+            child.position.y - relativePosition.y
+        )
+        let minAllowedDistance: CGFloat = 30
+        if distance < minAllowedDistance {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            let crash = SKSpriteNode(imageNamed: "crash")
+            crash.position = CGPoint(
+                x: needle.position.x + 10,
+                y: needle.position.y + 15
+            )
+            crash.setScale(0.12)
+            self.addChild(crash)
+            self.onTreeZoneHit?()
+            return
+        }
+    }
+}
+```
+
+<Accordion title="Collision Distance Calculation">
+  The `hypot` function calculates Euclidean distance between two points:
+  
+  ```swift
+  distance = √((x₂ - x₁)² + (y₂ - y₁)²)
+  ```
+  
+  Trees must be at least 30 points apart to prevent overlapping.
+</Accordion>
+
+## Successful Tree Placement
+
+If all collision checks pass, the needle becomes a permanent tree on the planet.
+
+```swift GameScene.swift
+needle.removeFromParent()
+needle.position = relativePosition
+
+// Correct rotation to stay upright
+needle.zRotation = -self.circle.zRotation
+needle.name = "treeZone"
+
+self.needleContainer.addChild(needle)
+
+self.treesShot += 1
+self.onTreeHit?()
+```
+
+<Steps>
+  <Step title="Convert Coordinates">
+    Move needle from scene coordinates to needleContainer coordinates
+  </Step>
+  
+  <Step title="Adjust Rotation">
+    Set rotation to negative of circle rotation to keep tree upright
+  </Step>
+  
+  <Step title="Mark as Tree Zone">
+    Name it "treeZone" for future collision detection
+  </Step>
+  
+  <Step title="Add to Container">
+    Place in needleContainer so it rotates with planet
+  </Step>
+</Steps>
+
+## Indicator Reappearance
+
+After successful planting, the indicator reappears with a smooth animation if more trees are needed.
+
+```swift GameScene.swift
+if self.treesShot >= self.treesTarget {
+    // Level complete - don't show indicator
+} else {
+    DispatchQueue.main.asyncAfter(deadline: .now()) {
+        guard let indicator = self.treeIndicator else { return }
+
+        // Set starting position higher
+        let normalY = self.circle.position.y + 300
+        let startY = normalY + 30
+
+        indicator.position = CGPoint(
+            x: self.circle.position.x, y: startY)
+        indicator.alpha = 0
+        indicator.isHidden = false
+
+        // Animate down to normal position while fading in
+        let moveDown = SKAction.moveTo(y: normalY, duration: 0.1)
+        let fadeIn = SKAction.fadeAlpha(to: 0.7, duration: 0.1)
+        let appearGroup = SKAction.group([moveDown, fadeIn])
+
+        // After appearing, continue with floating animation
+        let setupFloating = SKAction.run {
+            let floatUp = SKAction.moveBy(x: 0, y: 10, duration: 1.0)
+            let floatDown = SKAction.moveBy(x: 0, y: -10, duration: 1.0)
+            let floatSequence = SKAction.sequence([floatUp, floatDown])
+            let floatForever = SKAction.repeatForever(floatSequence)
+            indicator.run(floatForever, withKey: "floating")
+        }
+
+        let sequence = SKAction.sequence([appearGroup, setupFloating])
+        indicator.run(sequence)
+    }
+}
+```
+
+<Tip>
+The indicator drops down from above and fades in smoothly, providing visual feedback that the game is ready for the next tree.
+</Tip>
+
+## Blink Integration
+
+Tree shooting is triggered by eye blink detection in the main game view.
+
+```swift GameView.swift
+.onChange(of: detector.blinkCount) {
+    if showInitialBlinkAlert {
+        showInitialBlinkAlert = false
+        hasPlantedFirstTree = true
+        if (treesRemaining > 0) {
+            scene?.shootNeedle()
+        }
+    } else if !showMissionFailedPopup && !showLevelClearPopup {
+        scene?.shootNeedle()
+    }
+}
+```
+
+## Key Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `treesShot` | Int | Number of trees successfully planted |
+| `treesTarget` | Int | Trees needed to complete level |
+| `treeIndicator` | SKSpriteNode? | Floating indicator sprite |
+| `needleContainer` | SKNode | Container for planted trees |
+| `remainingTrees` | Int | Computed: trees left to plant |
+
+## Animation Timings
+
+<CardGroup cols={2}>
+  <Card title="Needle Flight" icon="arrow-down">
+    0.18 seconds to reach planet surface
+  </Card>
+  
+  <Card title="Indicator Float" icon="arrows-up-down">
+    1.0 second up, 1.0 second down cycle
+  </Card>
+  
+  <Card title="Indicator Reappear" icon="eye">
+    0.1 second fade-in and drop animation
+  </Card>
+  
+  <Card title="Indicator Offset" icon="up">
+    Starts 30 points above normal position
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+- Always convert needle position to needleContainer coordinates for accurate collision detection
+- Use `hypot` for proper Euclidean distance calculation between trees
+- Apply negative circle rotation to keep trees upright while planet rotates
+- Hide indicator immediately when shooting to avoid visual confusion
+- Play sound effects and haptic feedback for all collision events

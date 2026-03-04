@@ -1,0 +1,192 @@
+---
+title: 'Planet Mechanics'
+description: 'Learn how the rotating planet is implemented using SpriteKit, including circle setup, rotation logic, and dynamic difficulty scaling'
+---
+
+## Overview
+
+The planet (circle) is the core gameplay element in Reforestation Saga. It rotates continuously while players plant trees on its surface, with rotation speed and direction varying by level to increase difficulty.
+
+## Circle Setup
+
+The planet is implemented as an `SKSpriteNode` that serves as the main rotating element in the game scene.
+
+```swift GameScene.swift
+let circle = SKSpriteNode(imageNamed: "buminew")
+let needleContainer = SKNode()
+
+override func didMove(to view: SKView) {
+    self.backgroundColor = .clear
+    view.allowsTransparency = true
+
+    circle.size = CGSize(width: 590, height: 590)
+    circle.position = CGPoint(x: size.width / 2, y: size.height / 2.8)
+    addChild(circle)
+
+    circle.addChild(needleContainer)
+
+    setForbiddenArea()
+    setupTreeIndicator()
+}
+```
+
+<Info>
+The `needleContainer` is added as a child of the circle so that planted trees rotate with the planet.
+</Info>
+
+## Rotation Configuration
+
+Each level configures the planet's rotation speed and direction through the `configureLevel` method.
+
+```swift GameScene.swift
+func configureLevel(
+    treesNeeded: Int,
+    rotationDuration: Double,
+    rotateLeft: Bool
+) {
+    treesShot = 0
+    treesTarget = treesNeeded
+    resetNeedles()
+    setupTreeIndicator()
+    treeIndicator?.isHidden = false
+
+    circle.removeAllActions()
+
+    let angle: CGFloat = rotateLeft ? -.pi : .pi
+    let rotate = SKAction.rotate(byAngle: angle, duration: rotationDuration)
+    let forever = SKAction.repeatForever(rotate)
+    circle.run(forever)
+}
+```
+
+<Steps>
+  <Step title="Reset State">
+    Clear previous trees and reset counters for the new level
+  </Step>
+  
+  <Step title="Remove Actions">
+    Stop any existing rotation animations with `removeAllActions()`
+  </Step>
+  
+  <Step title="Configure Rotation">
+    Set rotation angle (negative for left, positive for right) and apply continuous rotation
+  </Step>
+</Steps>
+
+## Dynamic Difficulty Scaling
+
+Rotation speed and direction change based on the current level to progressively increase difficulty.
+
+```swift GameView.swift
+let rotationDuration: Double
+let rotateLeft: Bool
+
+switch currentLevel {
+case 1...5:
+    rotationDuration = 4
+    rotateLeft = false
+case 6...10:
+    rotationDuration = 3
+    rotateLeft = Bool.random()
+default:
+    rotationDuration = Double.random(in: 1.5...4)
+    rotateLeft = Bool.random()
+}
+
+newScene.configureLevel(
+    treesNeeded: treesNeeded,
+    rotationDuration: rotationDuration,
+    rotateLeft: rotateLeft
+)
+```
+
+### Difficulty Tiers
+
+<CardGroup cols={3}>
+  <Card title="Levels 1-5" icon="seedling">
+    **Easy Mode**
+    - Fixed 4-second rotation
+    - Always rotates right
+    - Predictable for beginners
+  </Card>
+  
+  <Card title="Levels 6-10" icon="tree">
+    **Medium Mode**
+    - Faster 3-second rotation
+    - Random direction
+    - Requires adaptation
+  </Card>
+  
+  <Card title="Levels 11+" icon="fire">
+    **Hard Mode**
+    - Random speed (1.5-4s)
+    - Random direction
+    - Maximum challenge
+  </Card>
+</CardGroup>
+
+## Rotation Direction
+
+The rotation direction is controlled by the angle parameter in SpriteKit's rotation action.
+
+<Accordion title="Understanding Rotation Angles">
+  - **Negative Pi (-.pi)**: Rotates counter-clockwise (left)
+  - **Positive Pi (.pi)**: Rotates clockwise (right)
+  - The `rotateLeft` boolean determines which angle to use
+  - Each rotation completes a full 180-degree turn before repeating
+</Accordion>
+
+## Continuous Rotation
+
+The planet rotates infinitely using SpriteKit's `repeatForever` action.
+
+```swift GameScene.swift
+let rotate = SKAction.rotate(byAngle: angle, duration: rotationDuration)
+let forever = SKAction.repeatForever(rotate)
+circle.run(forever)
+```
+
+<Warning>
+Always call `circle.removeAllActions()` before applying new rotation to prevent overlapping animations.
+</Warning>
+
+## Scene Reset
+
+When transitioning between levels, the scene is completely reset to ensure clean state.
+
+```swift GameView.swift
+func setupScene() {
+    if let oldScene = scene {
+        oldScene.removeAllActions()
+        oldScene.removeAllChildren()
+        oldScene.removeFromParent()
+    }
+    
+    let newScene = GameScene(size: UIScreen.main.bounds.size)
+    newScene.scaleMode = .resizeFill
+    // ... configure callbacks and level settings
+    
+    self.scene = newScene
+    self.sceneID = UUID()
+}
+```
+
+<Tip>
+Changing the `sceneID` forces SwiftUI to recreate the `SpriteView`, ensuring the new scene renders properly.
+</Tip>
+
+## Key Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `circle` | SKSpriteNode | Main planet sprite node |
+| `needleContainer` | SKNode | Container for planted trees |
+| `rotationDuration` | Double | Time for one 180° rotation |
+| `rotateLeft` | Bool | Direction of rotation |
+
+## Best Practices
+
+- Always remove existing actions before applying new rotations
+- Use `needleContainer` as a child of circle for automatic rotation of trees
+- Reset scene state completely when changing levels
+- Use `scaleMode = .resizeFill` for consistent rendering across devices

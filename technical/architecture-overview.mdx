@@ -1,0 +1,346 @@
+---
+title: 'Architecture Overview'
+description: 'Comprehensive guide to Reforestation Saga app architecture, including view hierarchy, state management, and navigation flow'
+---
+
+## App Structure
+
+Reforestation Saga follows a SwiftUI-based architecture with integrated SpriteKit game scenes. The app uses a hierarchical view structure with centralized state management.
+
+### Entry Point
+
+The app entry point defines the root-level state and dependency injection:
+
+```swift ReforestationSaga_App.swift
+@main
+struct ReforestationSaga_App: App {
+    @StateObject private var detector = EyeBlinkDetectorVision()
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environmentObject(detector)
+        }
+    }
+}
+```
+
+<Info>
+The `@StateObject` wrapper creates a single instance of `EyeBlinkDetectorVision` that persists for the app's lifetime, while `environmentObject` makes it accessible to all child views.
+</Info>
+
+## View Hierarchy
+
+The app follows a clear view hierarchy that separates concerns between navigation, game state, and presentation.
+
+<Steps>
+  <Step title="Root ContentView">
+    Creates the game data model and passes it down the view hierarchy:
+
+    ```swift ContentView.swift
+    struct ContentView: View {
+        @StateObject private var gameData = GameData()
+        
+        var body: some View {
+            HomeView()
+                .environmentObject(gameData)
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="HomeView - Main Menu">
+    Displays the main menu with highest level tracking:
+
+    ```swift HomeView.swift
+    struct HomeView: View {
+        @EnvironmentObject var gameData: GameData
+        @State private var isMuted: Bool = false
+        @State private var navigateToGame = false
+        @State private var QuestView = false
+        
+        var body: some View {
+            NavigationStack {
+                ZStack(alignment: .top) {
+                    Image("background")
+                        .ignoresSafeArea()
+                    
+                    // Display highest level
+                    Text("Highest Level: \(gameData.highestLevel)")
+                        .font(Font.custom("Gugi", size: 14))
+                    
+                    // Navigation to game views
+                }
+            }
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="IntroView - Mission Briefing">
+    Transitional view with SpriteKit preview:
+
+    ```swift IntroView.swift
+    struct IntroView: View {
+        @State private var scene: IntroScene?
+        @State private var isMuted: Bool = false
+        @State private var navToGame = false
+        @EnvironmentObject var gameData: GameData
+        
+        var body: some View {
+            ZStack {
+                if let scene = scene {
+                    SpriteView(scene: scene, options: [.allowsTransparency])
+                        .frame(width: 300, height: 600)
+                }
+                
+                NavigationLink(
+                    destination: GameView().navigationBarHidden(true),
+                    isActive: $navToGame
+                ) { }
+            }
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="GameView - Core Gameplay">
+    The main gameplay view integrating SpriteKit and SwiftUI controls (see [SwiftUI-SpriteKit Integration](/technical/swiftui-spritekit-integration)).
+  </Step>
+</Steps>
+
+## State Management
+
+Reforestation Saga uses a combination of `@StateObject`, `@EnvironmentObject`, and `@State` for managing different levels of state.
+
+### Observable Objects
+
+<Accordion title="GameData - Persistent Game State">
+  The `GameData` class manages persistent game progress:
+
+  ```swift ContentView.swift
+  class GameData: ObservableObject {
+      @Published var highestLevel: Int = UserDefaults.standard.savedHighestLevel
+  }
+  ```
+
+  This state is:
+  - Created at the `ContentView` level
+  - Injected via `@EnvironmentObject` to all child views
+  - Automatically persisted to `UserDefaults`
+  - Observable by all views that need access to game progress
+</Accordion>
+
+<Accordion title="EyeBlinkDetectorVision - Eye Tracking State">
+  The blink detector is created at the app root and shared globally:
+
+  ```swift GameView.swift
+  struct GameView: View {
+      @EnvironmentObject var detector: EyeBlinkDetectorVision
+      
+      var body: some View {
+          ZStack {
+              CameraViewVision(eyeBlinkDetector: detector)
+          }
+          .onChange(of: detector.blinkCount) {
+              if showInitialBlinkAlert {
+                  showInitialBlinkAlert = false
+                  scene?.shootNeedle()
+              } else if !showMissionFailedPopup && !showLevelClearPopup {
+                  scene?.shootNeedle()
+              }
+          }
+      }
+  }
+  ```
+
+  <Note>
+  The `.onChange(of: detector.blinkCount)` modifier triggers game actions when the detector's published property changes.
+  </Note>
+</Accordion>
+
+### Local View State
+
+<CardGroup cols={2}>
+  <Card title="Game Progress State" icon="gamepad">
+    ```swift GameView.swift
+    @State private var currentLevel: Int = 1
+    @State private var treesRemaining: Int = 3
+    @State private var treesNeeded: Int = 3
+    ```
+    
+    Tracks current gameplay session progress.
+  </Card>
+
+  <Card title="UI State" icon="display">
+    ```swift GameView.swift
+    @State private var showMissionFailedPopup = false
+    @State private var showLevelClearPopup = false
+    @State private var showInitialBlinkAlert: Bool = true
+    @State private var isMuted: Bool = false
+    ```
+    
+    Controls UI element visibility and audio settings.
+  </Card>
+
+  <Card title="Scene State" icon="cube">
+    ```swift GameView.swift
+    @State private var scene: GameScene?
+    @State var sceneID = UUID()
+    @State private var hasSetupScene = false
+    ```
+    
+    Manages SpriteKit scene lifecycle and identity.
+  </Card>
+
+  <Card title="Navigation State" icon="compass">
+    ```swift HomeView.swift
+    @State private var navigateToGame = false
+    @State private var QuestView = false
+    ```
+    
+    Controls navigation flow between views.
+  </Card>
+</CardGroup>
+
+## Navigation Flow
+
+The app uses SwiftUI's `NavigationStack` for declarative navigation:
+
+```swift HomeView.swift
+NavigationStack {
+    ZStack(alignment: .top) {
+        // Main menu content
+        
+        NavigationLink(destination: CameraCheckView()) {
+            Image("verifybutton")
+                .resizable()
+                .frame(width: 95, height: 44)
+        }
+    }
+}
+```
+
+<Steps>
+  <Step title="Launch">
+    App starts at `HomeView` displaying the main menu and highest level achieved.
+  </Step>
+
+  <Step title="Identity Verification">
+    User navigates to `CameraCheckView` to verify camera permissions and face detection.
+  </Step>
+
+  <Step title="Mission Briefing">
+    `IntroView` shows game preview with rotating Earth and mission start button.
+  </Step>
+
+  <Step title="Gameplay">
+    `GameView` provides core gameplay with eye-blink detection mechanics.
+  </Step>
+
+  <Step title="Level Progression">
+    Completed levels update `GameData.highestLevel` and trigger scene resets.
+  </Step>
+</Steps>
+
+<Warning>
+The `navigationBarBackButtonHidden(true)` modifier is used in `GameView` and `IntroView` to prevent accidental exits during gameplay.
+</Warning>
+
+## Data Persistence
+
+The app uses `UserDefaults` for simple data persistence with a custom extension:
+
+```swift GameView.swift
+extension UserDefaults {
+    private enum Keys {
+        static let highestLevel = "highestLevel"
+    }
+
+    var savedHighestLevel: Int {
+        get { integer(forKey: Keys.highestLevel) }
+        set { set(newValue, forKey: Keys.highestLevel) }
+    }
+}
+```
+
+### Saving Progress
+
+Progress is saved when a player achieves a new high score:
+
+```swift GameView.swift
+if currentLevel - 1 > gameData.highestLevel {
+    gameData.highestLevel = currentLevel - 1
+    UserDefaults.standard.savedHighestLevel = gameData.highestLevel
+}
+```
+
+### Loading Progress
+
+Progress is loaded when `GameData` is initialized:
+
+```swift ContentView.swift
+class GameData: ObservableObject {
+    @Published var highestLevel: Int = UserDefaults.standard.savedHighestLevel
+}
+```
+
+<Tip>
+Using a computed property in the `UserDefaults` extension provides a type-safe interface for persistence while centralizing the storage keys.
+</Tip>
+
+## Level Configuration
+
+Level difficulty scales dynamically using a mathematical progression:
+
+```swift GameView.swift
+func treesForLevel(_ level: Int) -> Int {
+    let base = 3
+    let cycle = (level - 1) / 5
+    let positionInCycle = (level - 1) % 5
+    return base + cycle + positionInCycle
+}
+```
+
+Rotation difficulty also increases:
+
+```swift GameView.swift
+let rotationDuration: Double
+let rotateLeft: Bool
+
+switch currentLevel {
+case 1...5:
+    rotationDuration = 4
+    rotateLeft = false
+case 6...10:
+    rotationDuration = 3
+    rotateLeft = Bool.random()
+default:
+    rotationDuration = Double.random(in: 1.5...4)
+    rotateLeft = Bool.random()
+}
+```
+
+<Info>
+**Level 1-5**: Fixed 4-second rotation, always clockwise  
+**Level 6-10**: 3-second rotation, random direction  
+**Level 11+**: Random rotation speed (1.5-4s) and direction
+</Info>
+
+## Lifecycle Management
+
+The app manages system-level behavior during gameplay:
+
+```swift GameView.swift
+.onAppear {
+    UIApplication.shared.isIdleTimerDisabled = true
+    setupScene()
+    GameMusicManager.shared.playMusic(filename: "GameEasy")
+}
+.onDisappear {
+    UIApplication.shared.isIdleTimerDisabled = false
+}
+```
+
+<Note>
+Disabling the idle timer prevents the screen from sleeping during active gameplay, which is critical for continuous eye-tracking functionality.
+</Note>

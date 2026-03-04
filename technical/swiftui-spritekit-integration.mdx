@@ -1,0 +1,516 @@
+---
+title: 'SwiftUI-SpriteKit Integration'
+description: 'Deep dive into how Reforestation Saga integrates SpriteKit game scenes within SwiftUI views'
+---
+
+## Overview
+
+Reforestation Saga combines SwiftUI's declarative UI framework with SpriteKit's powerful 2D game engine. This integration allows the game to leverage SwiftUI for navigation and controls while using SpriteKit for performant game rendering and physics.
+
+<Info>
+`SpriteView` is the bridge component that embeds SpriteKit scenes into SwiftUI view hierarchies.
+</Info>
+
+## SpriteView Usage
+
+The `SpriteView` component renders SpriteKit scenes within SwiftUI layouts.
+
+### Basic Implementation
+
+```swift GameView.swift
+struct GameView: View {
+    @State private var scene: GameScene?
+    @State var sceneID = UUID()
+    
+    var body: some View {
+        ZStack {
+            SpriteView(
+                scene: scene ?? GameScene(size: UIScreen.main.bounds.size),
+                options: [.allowsTransparency]
+            )
+            .id(sceneID)
+            .ignoresSafeArea()
+            
+            // SwiftUI overlays
+            VStack {
+                BarView(treesRemaining: treesRemaining, totalPollution: treesNeeded)
+                Spacer()
+            }
+        }
+    }
+}
+```
+
+<Steps>
+  <Step title="Create Scene State">
+    The scene is stored as optional `@State` to allow lazy initialization:
+    
+    ```swift
+    @State private var scene: GameScene?
+    ```
+  </Step>
+
+  <Step title="Embed with SpriteView">
+    Wrap the scene in `SpriteView` with transparency enabled:
+    
+    ```swift
+    SpriteView(scene: scene ?? GameScene(size: UIScreen.main.bounds.size),
+               options: [.allowsTransparency])
+    ```
+  </Step>
+
+  <Step title="Layer SwiftUI UI">
+    Place SwiftUI controls in the same `ZStack` above the scene:
+    
+    ```swift
+    ZStack {
+        SpriteView(scene: scene)
+        // SwiftUI overlays here
+    }
+    ```
+  </Step>
+</Steps>
+
+### Transparency Configuration
+
+The `.allowsTransparency` option enables SwiftUI backgrounds to show through:
+
+```swift GameScene.swift
+override func didMove(to view: SKView) {
+    self.backgroundColor = .clear
+    view.allowsTransparency = true
+    
+    // Add game objects
+}
+```
+
+<Warning>
+Both the `SpriteView` options and the scene's `backgroundColor` must be configured for transparency to work properly.
+</Warning>
+
+## Scene Configuration
+
+Scenes are configured with game parameters before being displayed.
+
+### Scene Initialization
+
+```swift GameView.swift
+func setupScene() {
+    // Clean up old scene
+    if let oldScene = scene {
+        oldScene.removeAllActions()
+        oldScene.removeAllChildren()
+        oldScene.removeFromParent()
+    }
+    
+    // Create new scene
+    let newTrees = treesForLevel(currentLevel)
+    self.treesNeeded = newTrees
+    let newScene = GameScene(size: UIScreen.main.bounds.size)
+    newScene.scaleMode = .resizeFill
+    
+    // Configure callbacks (see below)
+    newScene.onFailZoneHit = {
+        showMissionFailedPopup = true
+    }
+    newScene.onTreeHit = {
+        treesRemaining -= 1
+        if treesRemaining <= 0 {
+            showLevelClearPopup = true
+        }
+    }
+    
+    // Configure level parameters
+    newScene.configureLevel(
+        treesNeeded: treesNeeded,
+        rotationDuration: rotationDuration,
+        rotateLeft: rotateLeft
+    )
+    
+    self.treesRemaining = treesNeeded
+    self.scene = newScene
+    self.sceneID = UUID()
+    resumeGame()
+}
+```
+
+<Accordion title="Why Clean Up Old Scenes?">
+  Removing all actions, children, and parent references prevents:
+  - Memory leaks from retained action closures
+  - Continued execution of animations
+  - Conflicts with the new scene instance
+  
+  This is critical when resetting levels or restarting gameplay.
+</Accordion>
+
+### Level Configuration Method
+
+The scene exposes a configuration method for level-specific parameters:
+
+```swift GameScene.swift
+func configureLevel(
+    treesNeeded: Int,
+    rotationDuration: Double,
+    rotateLeft: Bool
+) {
+    treesShot = 0
+    treesTarget = treesNeeded
+    resetNeedles()
+    setupTreeIndicator()
+    treeIndicator?.isHidden = false
+
+    circle.removeAllActions()
+
+    let angle: CGFloat = rotateLeft ? -.pi : .pi
+    let rotate = SKAction.rotate(byAngle: angle, duration: rotationDuration)
+    let forever = SKAction.repeatForever(rotate)
+    circle.run(forever)
+}
+```
+
+<Tip>
+Separating configuration from initialization allows the same scene class to be reused with different parameters across levels.
+</Tip>
+
+## Scene Lifecycle
+
+SpriteKit scenes have a distinct lifecycle that must be managed within SwiftUI.
+
+### Initialization and Setup
+
+```swift GameView.swift
+.onAppear {
+    guard !hasSetupScene else { return }
+    let newScene = GameScene(size: UIScreen.main.bounds.size)
+    newScene.scaleMode = .resizeFill
+    newScene.onFailZoneHit = {
+        showMissionFailedPopup = true
+    }
+    self.scene = newScene
+    
+    setupScene()
+    GameMusicManager.shared.playMusic(filename: "GameEasy")
+}
+```
+
+<Note>
+The `hasSetupScene` flag prevents double initialization when SwiftUI re-renders the view.
+</Note>
+
+### Pause and Resume
+
+Game state can be paused by controlling the scene's `isPaused` property:
+
+```swift GameView.swift
+func pauseGame() {
+    scene?.isPaused = true
+}
+
+func resumeGame() {
+    scene?.isPaused = false
+}
+```
+
+This is triggered by UI events:
+
+```swift GameView.swift
+.onChange(of: showMissionFailedPopup) { newValue in
+    if newValue {
+        pauseGame()
+        GameMusicManager.shared.playSoundEffect(filename: soundEffectName)
+        GameMusicManager.shared.pauseMusic()
+    } else {
+        resumeGame()
+        GameMusicManager.shared.resumeMusic()
+    }
+}
+```
+
+### Cleanup on Disappear
+
+```swift GameView.swift
+.onDisappear {
+    UIApplication.shared.isIdleTimerDisabled = false
+}
+```
+
+<Warning>
+Always re-enable system behaviors (like idle timer) when leaving gameplay views to avoid impacting other parts of the app.
+</Warning>
+
+## Callbacks Between SwiftUI and SpriteKit
+
+Callbacks enable SpriteKit scenes to communicate game events to SwiftUI.
+
+### Defining Callbacks in GameScene
+
+```swift GameScene.swift
+class GameScene: SKScene {
+    var onFailZoneHit: (() -> Void)?
+    var onTreeZoneHit: (() -> Void)?
+    var onTreeHit: (() -> Void)?
+    
+    func shootNeedle() {
+        // Game logic...
+        
+        // Check if needle hits fail zone
+        for zoneName in failZoneNames {
+            if let failZone = self.circle.childNode(withName: zoneName),
+                failZone.contains(relativePosition)
+            {
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+                self.isFail = true
+                self.onFailZoneHit?()  // Trigger callback
+                return
+            }
+        }
+        
+        // Check collision with existing trees
+        for child in self.needleContainer.children {
+            if child.name == "treeZone" {
+                let distance = hypot(
+                    child.position.x - relativePosition.x,
+                    child.position.y - relativePosition.y
+                )
+                if distance < minAllowedDistance {
+                    self.onTreeZoneHit?()  // Trigger callback
+                    return
+                }
+            }
+        }
+        
+        // Successfully planted tree
+        self.treesShot += 1
+        self.onTreeHit?()  // Trigger callback
+    }
+}
+```
+
+### Assigning Callbacks in SwiftUI
+
+```swift GameView.swift
+func setupScene() {
+    let newScene = GameScene(size: UIScreen.main.bounds.size)
+    
+    newScene.onFailZoneHit = {
+        showMissionFailedPopup = true
+    }
+    
+    newScene.onTreeZoneHit = {
+        reason = "pohon"
+        showMissionFailedPopup = true
+    }
+    
+    newScene.onTreeHit = {
+        treesRemaining -= 1
+        if treesRemaining <= 0 {
+            showLevelClearPopup = true
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                showLevelClearPopup = false
+                currentLevel += 1
+                
+                if currentLevel - 1 > gameData.highestLevel {
+                    gameData.highestLevel = currentLevel - 1
+                    UserDefaults.standard.savedHighestLevel = gameData.highestLevel
+                }
+                setupScene()
+            }
+        }
+    }
+    
+    self.scene = newScene
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="onFailZoneHit" icon="circle-xmark">
+    Triggered when needle hits water (fail zone).
+    
+    **Action**: Show mission failed popup
+  </Card>
+
+  <Card title="onTreeZoneHit" icon="trees">
+    Triggered when needle collides with existing tree.
+    
+    **Action**: Show mission failed popup with collision reason
+  </Card>
+
+  <Card title="onTreeHit" icon="circle-check">
+    Triggered when needle successfully plants.
+    
+    **Action**: Decrement trees remaining, check level completion
+  </Card>
+</CardGroup>
+
+<Info>
+Callbacks are called from SpriteKit's game loop but update SwiftUI `@State` properties, automatically triggering view updates.
+</Info>
+
+## Scene ID Management
+
+The `sceneID` property forces SwiftUI to recreate the `SpriteView` when the scene changes.
+
+### The Problem
+
+Simply updating the `scene` state doesn't always refresh the `SpriteView`:
+
+```swift
+// This may not update the view
+self.scene = newScene
+```
+
+### The Solution
+
+```swift GameView.swift
+struct GameView: View {
+    @State var sceneID = UUID()
+    
+    var body: some View {
+        SpriteView(scene: scene ?? GameScene(size: UIScreen.main.bounds.size))
+            .id(sceneID)  // Key identifier for view identity
+    }
+    
+    func setupScene() {
+        let newScene = GameScene(size: UIScreen.main.bounds.size)
+        // ... configure scene ...
+        
+        self.scene = newScene
+        self.sceneID = UUID()  // Force view recreation
+    }
+}
+```
+
+<Steps>
+  <Step title="Assign ID to SpriteView">
+    The `.id()` modifier tells SwiftUI to track view identity:
+    
+    ```swift
+    SpriteView(scene: scene)
+        .id(sceneID)
+    ```
+  </Step>
+
+  <Step title="Generate New UUID">
+    When resetting the scene, generate a new UUID:
+    
+    ```swift
+    self.sceneID = UUID()
+    ```
+  </Step>
+
+  <Step title="SwiftUI Recreates View">
+    SwiftUI detects the ID change and recreates the `SpriteView` with the new scene.
+  </Step>
+</Steps>
+
+<Warning>
+Without updating `sceneID`, you may experience:
+- Scene not rendering updated state
+- Animations not restarting
+- Callbacks targeting the old scene instance
+</Warning>
+
+## Integrating User Input
+
+The game responds to eye blinks detected by Vision framework:
+
+```swift GameView.swift
+struct GameView: View {
+    @EnvironmentObject var detector: EyeBlinkDetectorVision
+    
+    var body: some View {
+        ZStack {
+            CameraViewVision(eyeBlinkDetector: detector)
+            SpriteView(scene: scene)
+        }
+        .onChange(of: detector.blinkCount) {
+            if showInitialBlinkAlert {
+                showInitialBlinkAlert = false
+                hasPlantedFirstTree = true
+                if (treesRemaining > 0) {
+                    scene?.shootNeedle()
+                }
+            } else if !showMissionFailedPopup && !showLevelClearPopup {
+                scene?.shootNeedle()
+            }
+        }
+    }
+}
+```
+
+### Scene Action Methods
+
+The scene exposes methods that SwiftUI can call:
+
+```swift GameScene.swift
+func shootNeedle() {
+    guard remainingTrees > 0 else { return }
+    guard isFail == false else { return }
+    GameMusicManager.shared.playSoundEffect(filename: "TreeSFX")
+    
+    let needle = SKSpriteNode(imageNamed: "pohonnew")
+    treeIndicator?.isHidden = true
+    let needleLength: CGFloat = 70
+    
+    needle.size = CGSize(width: 30, height: needleLength)
+    let startY = circle.position.y + 300
+    needle.position = CGPoint(x: circle.position.x, y: startY)
+    needle.zRotation = 0
+    addChild(needle)
+    
+    let circleRadius: CGFloat = 118
+    let targetPoint = CGPoint(
+        x: circle.position.x,
+        y: circle.position.y + circleRadius + needleLength / 2
+    )
+    
+    let move = SKAction.move(to: targetPoint, duration: 0.18)
+    let stickToCircle = SKAction.run { /* collision detection */ }
+    let sequence = SKAction.sequence([move, stickToCircle])
+    needle.run(sequence)
+}
+```
+
+<Tip>
+Public methods on `SKScene` subclasses can be called from SwiftUI, enabling tight integration between UI events and game logic.
+</Tip>
+
+## Preview Support
+
+To support SwiftUI previews with SpriteKit scenes, use custom initializers:
+
+```swift GameView.swift
+extension GameView {
+    static func initForPreview() -> GameView {
+        var view = GameView()
+        let scene = GameScene(size: UIScreen.main.bounds.size)
+        scene.configureLevel(
+            treesNeeded: 3, 
+            rotationDuration: 2.0, 
+            rotateLeft: false
+        )
+        
+        view = GameView(
+            scene: scene,
+            currentLevel: 1,
+            isMuted: false,
+            treesRemaining: 3,
+            treesNeeded: 3,
+            showInitialBlinkAlert: true
+        )
+        
+        return view
+    }
+}
+
+#Preview {
+    GameView.initForPreview()
+        .environmentObject(GameData())
+        .environmentObject(EyeBlinkDetectorVision())
+}
+```
+
+<Note>
+Previews require all `@EnvironmentObject` dependencies to be explicitly provided via `.environmentObject()` modifiers.
+</Note>

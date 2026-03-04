@@ -1,0 +1,145 @@
+---
+title: Welcome to Reforestation Saga
+description: An innovative iOS game that combines eye-blink detection with environmental awareness through interactive gameplay
+---
+
+<div className="relative overflow-hidden dark:bg-[#0f1117] bg-white py-20">
+  <div className="absolute inset-0 bg-gradient-to-br from-[#F0D8A6]/10 via-transparent to-[#C9A962]/10"></div>
+  <div className="relative max-w-6xl mx-auto px-6">
+    <div className="text-center">
+      <h1 className="text-5xl md:text-6xl font-bold dark:text-white text-gray-900 mb-6">
+        Save the Planet, One Blink at a Time
+      </h1>
+      <p className="text-xl dark:text-gray-300 text-gray-600 max-w-3xl mx-auto mb-8">
+        Reforestation Saga is an innovative iOS game that uses eye-blink detection to control gameplay. Plant trees on rotating planets and help restore the environment through an engaging, hands-free gaming experience.
+      </p>
+      <div className="flex flex-wrap gap-4 justify-center">
+        <a 
+          href="/quickstart" 
+          className="inline-block px-8 py-3 bg-[#F0D8A6] text-gray-900 font-semibold rounded-lg hover:bg-[#C9A962] transition-colors no-underline"
+        >
+          Get Started
+        </a>
+        <a 
+          href="/features/eye-blink-detection" 
+          className="inline-block px-8 py-3 border-2 border-[#F0D8A6]/30 dark:bg-[#F0D8A6]/10 bg-[#F0D8A6]/5 dark:text-gray-100 text-gray-900 font-semibold rounded-lg hover:border-[#F0D8A6] transition-colors no-underline"
+        >
+          Explore Features
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Key Features</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+    Discover what makes Reforestation Saga a unique environmental gaming experience
+  </p>
+  
+  <CardGroup cols={2}>
+    <Card title="Eye-Blink Control" icon="eye" href="/features/eye-blink-detection">
+      Use natural eye blinks to plant trees. Our Vision framework integration detects blinks in real-time for hands-free gameplay.
+    </Card>
+    <Card title="Rotating Planet Mechanics" icon="globe" href="/game/planet-mechanics">
+      Navigate rotating planets with dynamic difficulty. Each level introduces new challenges with varying rotation speeds and patterns.
+    </Card>
+    <Card title="Progressive Levels" icon="chart-line" href="/features/level-progression">
+      Start easy and face increasing challenges. The difficulty scales intelligently based on your performance.
+    </Card>
+    <Card title="Immersive Audio" icon="music" href="/features/audio-system">
+      Enjoy adaptive soundscapes with background music and responsive sound effects that enhance the gameplay experience.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Quick Start</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+    Get up and running with Reforestation Saga in just a few steps
+  </p>
+
+  <Steps>
+    <Step title="Launch the Game">
+      Open Reforestation Saga on your iOS device. You'll be greeted with the home screen showing your highest level achieved.
+      
+      <Note>
+        The game requires camera access for eye-blink detection. Make sure to grant camera permissions when prompted.
+      </Note>
+    </Step>
+    
+    <Step title="Complete Identity Verification">
+      Tap **Tap to Play** to begin your mission. You'll need to verify your identity by aligning your face with the camera scanner. The system uses the Vision framework to detect your face and eyes.
+      
+      ```swift
+      // The game detects blinks using Eye Aspect Ratio (EAR)
+      if leftEAR < 0.1 && rightEAR < 0.1 {
+          if !self.isEyeClosed {
+              self.isEyeClosed = true
+          }
+      }
+      ```
+    </Step>
+    
+    <Step title="Start Your Mission">
+      After verification, you'll receive your mission briefing. Tap **Start Mission** to begin planting trees. Each blink shoots a tree seedling toward the rotating planet.
+      
+      <Tip>
+        Wait for the initial blink alert to disappear before starting. Your first blink will plant your first tree!
+      </Tip>
+    </Step>
+    
+    <Step title="Plant Trees and Progress">
+      Blink to plant trees on the green areas of the rotating planet. Avoid the ocean (blue areas) and existing trees. Complete each level by planting all required trees.
+      
+      <Accordion title="Level requirements">
+        - Level 1-5: 3-7 trees needed, 4-second rotation
+        - Level 6-10: 8-12 trees needed, 3-second rotation, random direction
+        - Level 11+: 13+ trees needed, 1.5-4 second rotation, random direction
+      </Accordion>
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Explore by Topic</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+    Deep dive into specific aspects of the game
+  </p>
+
+  <CardGroup cols={3}>
+    <Card title="Game Mechanics" icon="gamepad" href="/features/game-mechanics">
+      Learn how the core gameplay loop works
+    </Card>
+    <Card title="Tree Planting System" icon="tree" href="/game/tree-planting">
+      Understand the tree placement mechanics
+    </Card>
+    <Card title="Fail Zones" icon="triangle-exclamation" href="/game/fail-zones">
+      Avoid ocean areas and tree collisions
+    </Card>
+    <Card title="Architecture" icon="building" href="/technical/architecture-overview">
+      Explore the technical implementation
+    </Card>
+    <Card title="Eye Tracking" icon="camera" href="/technical/eye-tracking">
+      Dive into the Vision framework integration
+    </Card>
+    <Card title="Game Scene" icon="cube" href="/technical/game-scene">
+      Understand SpriteKit scene management
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="dark:bg-[#1a1d27] bg-gray-50 dark:border-[#27272a] border-gray-200 border rounded-2xl p-8">
+    <h2 className="text-2xl font-bold dark:text-white text-gray-900 mb-4">Ready to Build?</h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-6">
+      Explore the technical implementation and learn how to extend or customize Reforestation Saga for your own projects.
+    </p>
+    <a 
+      href="/technical/architecture-overview" 
+      className="inline-block px-6 py-2.5 bg-[#F0D8A6] text-gray-900 font-semibold rounded-lg hover:bg-[#C9A962] transition-colors no-underline"
+    >
+      View Technical Docs
+    </a>
+  </div>
+</div>

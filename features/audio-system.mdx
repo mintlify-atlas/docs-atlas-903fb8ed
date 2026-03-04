@@ -1,0 +1,364 @@
+---
+title: Audio System
+description: Background music management, sound effects, and audio control using AVFoundation and GameMusicManager
+---
+
+## Overview
+
+Reforestation Saga uses a singleton `GameMusicManager` class built on AVFoundation to manage background music and sound effects throughout the game.
+
+## GameMusicManager Architecture
+
+The audio system uses a singleton pattern to ensure consistent audio management across all game views.
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+class GameMusicManager {
+    static let shared = GameMusicManager()
+    private var audioPlayer: AVAudioPlayer?
+    private var effectPlayers: [AVAudioPlayer] = []
+
+    private init() {}
+}
+```
+
+<Info>
+  The singleton pattern (`static let shared`) ensures only one instance of GameMusicManager exists, preventing audio conflicts and simplifying access from anywhere in the app.
+</Info>
+
+## Background Music
+
+The background music system supports looping audio tracks during gameplay.
+
+### Playing Music
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+func playMusic(filename: String = "GameEasy", fileExtension: String = "mp3") {
+    guard
+        let url = Bundle.main.url(
+            forResource: filename, withExtension: fileExtension)
+    else {
+        print("🔴 Failed to find music file")
+        return
+    }
+
+    do {
+        audioPlayer = try AVAudioPlayer(contentsOf: url)
+        audioPlayer?.numberOfLoops = -1  // loop forever
+        audioPlayer?.prepareToPlay()
+        audioPlayer?.play()
+    } catch {
+        print("🔴 Failed to play music: \(error)")
+    }
+}
+```
+
+<Accordion title="Understanding numberOfLoops = -1">
+  Setting `numberOfLoops` to `-1` makes the audio player loop indefinitely. Other values:
+  - `0`: Play once (no loop)
+  - `1`: Play twice (loop once)
+  - `2`: Play three times (loop twice)
+  - `-1`: Loop forever
+</Accordion>
+
+### Music Control Functions
+
+<Tabs>
+  <Tab title="Pause">
+    ```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+    func pauseMusic() {
+        audioPlayer?.pause()
+    }
+    ```
+    Temporarily stops music playback while preserving the current position.
+  </Tab>
+  <Tab title="Resume">
+    ```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+    func resumeMusic() {
+        audioPlayer?.play()
+    }
+    ```
+    Continues playing from where the music was paused.
+  </Tab>
+  <Tab title="Stop">
+    ```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+    func stopMusic() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+    }
+    ```
+    Stops music completely and releases the audio player instance.
+  </Tab>
+  <Tab title="Check Status">
+    ```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+    var isPlaying: Bool {
+        return audioPlayer?.isPlaying ?? false
+    }
+    ```
+    Returns whether music is currently playing.
+  </Tab>
+</Tabs>
+
+## Sound Effects
+
+Sound effects are handled separately from background music, allowing multiple effects to play simultaneously.
+
+### Playing Sound Effects
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+func playSoundEffect(filename: String, fileExtension: String = "mp3") {
+    guard
+        let url = Bundle.main.url(
+            forResource: filename, withExtension: fileExtension)
+    else { return }
+
+    do {
+        let player = try AVAudioPlayer(contentsOf: url)
+        player.volume = 1.0
+        player.prepareToPlay()
+        player.play()
+        effectPlayers.append(player)
+    } catch {
+        print("Error playing sound effect: \(error)")
+    }
+
+    // Clean up finished players
+    effectPlayers.removeAll { !$0.isPlaying }
+}
+```
+
+<Note>
+  Each sound effect gets its own `AVAudioPlayer` instance, allowing multiple sounds to overlap. Finished players are automatically cleaned up to prevent memory leaks.
+</Note>
+
+## Game Integration
+
+The audio system is integrated throughout the game lifecycle and user interactions.
+
+### Starting Game Music
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+.onAppear {
+    UIApplication.shared.isIdleTimerDisabled = true
+    guard !hasSetupScene else { return }
+    // ... scene setup ...
+    
+    GameMusicManager.shared.stopMusic()
+    GameMusicManager.shared.playMusic(filename: "GameEasy")
+}
+```
+
+### Mute/Unmute Toggle
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+Button {
+    isMuted.toggle()
+    if isMuted {
+        GameMusicManager.shared.pauseMusic()
+    } else {
+        GameMusicManager.shared.resumeMusic()
+    }
+} label: {
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Mute" icon="volume-xmark">
+    Pauses background music while preserving playback position.
+  </Card>
+  <Card title="Unmute" icon="volume-high">
+    Resumes background music from where it was paused.
+  </Card>
+</CardGroup>
+
+## Event-Based Sound Effects
+
+Different game events trigger specific sound effects.
+
+### Tree Planting Sound
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameScene.swift
+func shootNeedle() {
+    guard remainingTrees > 0 else { return }
+    guard isFail == false else { return }
+    GameMusicManager.shared.playSoundEffect(filename: "TreeSFX")
+    // ... planting logic ...
+}
+```
+
+### Success Sound
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+.onChange(of: showLevelClearPopup) { newValue in
+    if newValue {
+        pauseGame()
+        GameMusicManager.shared.playSoundEffect(filename: "success")
+    } else {
+        resumeGame()
+    }
+}
+```
+
+### Failure Sounds
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+.onChange(of: showMissionFailedPopup) { newValue in
+    if newValue {
+        pauseGame()
+        let soundEffectName: String = reason == "laut" ? "water" : "failed"
+        GameMusicManager.shared.playSoundEffect(filename: soundEffectName)
+        GameMusicManager.shared.pauseMusic()
+    } else {
+        resumeGame()
+        GameMusicManager.shared.resumeMusic()
+    }
+}
+```
+
+### Sound Effect Catalog
+
+<Steps>
+  <Step title="TreeSFX">
+    Played when a tree is planted on the planet.
+  </Step>
+  <Step title="success">
+    Played when a level is completed successfully.
+  </Step>
+  <Step title="water">
+    Played when a tree lands in a water zone.
+  </Step>
+  <Step title="failed">
+    Played when a tree collides with another tree.
+  </Step>
+</Steps>
+
+## Music State Management
+
+Music playback is automatically paused and resumed based on game state.
+
+### Pause on Popup
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+.onChange(of: showMissionFailedPopup) { newValue in
+    if newValue {
+        pauseGame()
+        let soundEffectName: String = reason == "laut" ? "water" : "failed"
+        GameMusicManager.shared.playSoundEffect(filename: soundEffectName)
+        GameMusicManager.shared.pauseMusic()
+    } else {
+        resumeGame()
+        GameMusicManager.shared.resumeMusic()
+    }
+}
+```
+
+<Accordion title="Why pause music on popup?">
+  When failure or success popups appear, the game pauses. Background music is also paused to:
+  - Reduce audio distraction during important UI moments
+  - Allow sound effects to be clearly heard
+  - Conserve battery during idle moments
+  - Create a natural "breathing space" between attempts
+</Accordion>
+
+## Audio Player Management
+
+### Effect Player Cleanup
+
+The manager automatically cleans up finished sound effect players to prevent memory buildup.
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+effectPlayers.removeAll { !$0.isPlaying }
+```
+
+<Warning>
+  Without cleanup, each sound effect would create a new AVAudioPlayer that persists in memory even after finishing. The `removeAll` call prevents memory leaks.
+</Warning>
+
+### Music Player Lifecycle
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+func stopMusic() {
+    audioPlayer?.stop()
+    audioPlayer = nil
+}
+```
+
+<Tip>
+  Setting `audioPlayer = nil` after stopping releases the AVAudioPlayer instance, freeing up memory and system resources.
+</Tip>
+
+## Audio Session Configuration
+
+### Preventing Auto-Lock During Gameplay
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+.onAppear {
+    UIApplication.shared.isIdleTimerDisabled = true
+    // ... setup game ...
+}
+.onDisappear {
+    UIApplication.shared.isIdleTimerDisabled = false
+}
+```
+
+<Info>
+  Disabling the idle timer prevents the screen from auto-locking during gameplay, which is essential since players control the game with blinks rather than touch.
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Singleton Pattern" icon="circle-1">
+    Using `shared` instance ensures consistent audio state across all views.
+  </Card>
+  <Card title="Prepare Before Play" icon="circle-2">
+    `prepareToPlay()` reduces latency by pre-loading audio buffers.
+  </Card>
+  <Card title="Effect Array" icon="circle-3">
+    Maintaining separate players for effects allows overlapping sounds.
+  </Card>
+  <Card title="Automatic Cleanup" icon="circle-4">
+    Removing finished players prevents memory leaks in long play sessions.
+  </Card>
+</CardGroup>
+
+## File Format Support
+
+The system defaults to MP3 but supports multiple audio formats.
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+func playMusic(filename: String = "GameEasy", fileExtension: String = "mp3")
+```
+
+<Note>
+  While MP3 is the default, AVAudioPlayer supports many formats including:
+  - AAC (.m4a, .aac)
+  - ALAC (.m4a)
+  - WAV (.wav)
+  - AIFF (.aif, .aiff)
+  - CAF (.caf)
+</Note>
+
+## Error Handling
+
+The audio system includes basic error handling for missing files and playback failures.
+
+```swift ~/workspace/source/ReforestationSaga/GameMusicManager.swift
+guard
+    let url = Bundle.main.url(
+        forResource: filename, withExtension: fileExtension)
+else {
+    print("🔴 Failed to find music file")
+    return
+}
+
+do {
+    audioPlayer = try AVAudioPlayer(contentsOf: url)
+    // ... setup ...
+} catch {
+    print("🔴 Failed to play music: \(error)")
+}
+```
+
+<Tip>
+  The 🔴 emoji prefix in error logs makes audio-related errors easy to spot in Xcode's console.
+</Tip>

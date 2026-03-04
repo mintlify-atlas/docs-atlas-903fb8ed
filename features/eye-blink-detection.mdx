@@ -1,0 +1,286 @@
+---
+title: Eye Blink Detection
+description: Vision framework integration for real-time eye blink detection using facial landmarks and EAR calculation
+---
+
+## Overview
+
+Reforestation Saga uses Apple's Vision framework to detect eye blinks in real-time through the device camera. The eye blink detection system calculates the Eye Aspect Ratio (EAR) to determine when a user blinks, which triggers tree planting in the game.
+
+## Vision Framework Integration
+
+The `EyeBlinkDetectorVision` class manages camera input and processes video frames using Vision's face landmark detection.
+
+### Camera Setup
+
+<Steps>
+  <Step title="Configure AVCaptureSession">
+    The capture session is configured with high-quality video preset and supports both front and back cameras.
+
+    ```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+    func setupCamera(in view: CameraPreviewViewVision, usingFrontCamera: Bool) {
+        session.beginConfiguration()
+        session.sessionPreset = .high
+
+        session.inputs.forEach { session.removeInput($0) }
+        currentCameraPosition = usingFrontCamera ? .front : .back
+
+        guard let device = getCamera(for: currentCameraPosition),
+            let input = try? AVCaptureDeviceInput(device: device)
+        else {
+            session.commitConfiguration()
+            return
+        }
+
+        if session.canAddInput(input) {
+            session.addInput(input)
+        }
+    ```
+  </Step>
+
+  <Step title="Setup Video Output">
+    Configure video output with a dedicated queue for processing frames.
+
+    ```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+    videoOutput.setSampleBufferDelegate(
+        self, queue: DispatchQueue(label: "videoQueue"))
+    if session.canAddOutput(videoOutput) {
+        session.addOutput(videoOutput)
+    }
+    ```
+  </Step>
+
+  <Step title="Start Capture Session">
+    The session starts on a background queue to avoid blocking the main thread.
+
+    ```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+    DispatchQueue.global(qos: .userInitiated).async {
+        self.session.startRunning()
+    }
+    ```
+  </Step>
+</Steps>
+
+## Eye Aspect Ratio (EAR) Calculation
+
+The EAR algorithm determines if eyes are open or closed by measuring the ratio between vertical and horizontal eye distances.
+
+### EAR Formula Implementation
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+private func computeEyeAspectRatio(_ eye: VNFaceLandmarkRegion2D) -> CGFloat {
+    guard eye.pointCount >= 6 else { return 0 }
+
+    let p2 = eye.normalizedPoints[1]
+    let p6 = eye.normalizedPoints[5]
+    let p3 = eye.normalizedPoints[2]
+    let p5 = eye.normalizedPoints[4]
+    let p1 = eye.normalizedPoints[0]
+    let p4 = eye.normalizedPoints[3]
+
+    let vertical1 = hypot(p2.x - p6.x, p2.y - p6.y)
+    let vertical2 = hypot(p3.x - p5.x, p3.y - p5.y)
+    let horizontal = hypot(p1.x - p4.x, p1.y - p4.y)
+
+    return (vertical1 + vertical2) / (2.0 * horizontal)
+}
+```
+
+<Info>
+  The EAR value decreases when eyes close. A threshold of **0.1** is used to detect closed eyes in this implementation.
+</Info>
+
+## Face Landmark Detection
+
+The system processes video frames to detect facial landmarks and extract eye regions.
+
+### Frame Processing
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+func captureOutput(
+    _ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
+    from connection: AVCaptureConnection
+) {
+    frameCount += 1
+    guard frameCount % 3 == 0 else { return } // Process every 3rd frame
+    
+    guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+    else { return }
+
+    let request = VNDetectFaceLandmarksRequest {
+        [weak self] request, error in
+        guard let self = self,
+            let results = request.results as? [VNFaceObservation],
+            let previewLayer = self.previewLayer
+        else { return }
+```
+
+<Tip>
+  Processing every 3rd frame instead of every frame significantly improves performance while maintaining responsive blink detection.
+</Tip>
+
+### Blink Detection Logic
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+if let landmarks = face.landmarks,
+    let leftEye = landmarks.leftEye,
+    let rightEye = landmarks.rightEye
+{
+    let leftEAR = self.computeEyeAspectRatio(leftEye)
+    let rightEAR = self.computeEyeAspectRatio(rightEye)
+
+    if leftEAR < 0.1  && rightEAR < 0.1 {
+        if !self.isEyeClosed {
+            self.isEyeClosed = true
+        }
+    } else {
+        if self.isEyeClosed {
+            self.blinkCount += 1
+            DispatchQueue.main.async {
+                self.blinkCountLabel?.text = "Blink: \(self.blinkCount)"
+            }
+            self.isEyeClosed = false
+        }
+    }
+}
+```
+
+<Accordion title="How Blink Detection Works">
+  1. **Eyes Open**: EAR > 0.1 for both eyes
+  2. **Eyes Close**: Both EAR values drop below 0.1, set `isEyeClosed = true`
+  3. **Eyes Reopen**: EAR rises above 0.1, increment `blinkCount` and trigger game action
+  4. **State Reset**: Set `isEyeClosed = false` to prepare for next blink
+
+  This state-based approach prevents multiple triggers during a single blink and ensures accurate counting.
+</Accordion>
+
+## Camera Switching
+
+Users can switch between front and back cameras during gameplay.
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+@objc func switchCameraTapped() {
+    session.beginConfiguration()
+    session.inputs.forEach { session.removeInput($0) }
+
+    currentCameraPosition = (currentCameraPosition == .back) ? .front : .back
+
+    guard let newDevice = getCamera(for: currentCameraPosition),
+        let newInput = try? AVCaptureDeviceInput(device: newDevice)
+    else {
+        session.commitConfiguration()
+        return
+    }
+
+    if session.canAddInput(newInput) {
+        session.addInput(newInput)
+    }
+
+    session.commitConfiguration()
+}
+```
+
+### Camera UI Button
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+let button = UIButton(type: .system)
+button.setImage(UIImage(systemName: "camera.rotate"), for: .normal)
+button.tintColor = .white
+button.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+button.layer.cornerRadius = 25
+button.translatesAutoresizingMaskIntoConstraints = false
+button.addTarget(
+    eyeBlinkDetector,
+    action: #selector(EyeBlinkDetectorVision.switchCameraTapped),
+    for: .touchUpInside)
+```
+
+## Visual Feedback
+
+The system overlays visual indicators on the camera preview to show detected eye landmarks.
+
+### Eye Landmark Overlay
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+private func drawLandmark(
+    _ landmark: VNFaceLandmarkRegion2D, for face: VNFaceObservation,
+    in layer: AVCaptureVideoPreviewLayer
+) -> CAShapeLayer {
+    let path = UIBezierPath()
+    let points = landmark.normalizedPoints
+
+    for i in 0..<points.count {
+        let point = points[i]
+        let converted = VNImagePointForFaceLandmarkPoint(
+            point, face.boundingBox, Int(layer.bounds.width),
+            Int(layer.bounds.height))
+        if i == 0 {
+            path.move(to: converted)
+        } else {
+            path.addLine(to: converted)
+        }
+    }
+    path.close()
+
+    let shapeLayer = CAShapeLayer()
+    shapeLayer.path = path.cgPath
+    shapeLayer.strokeColor = UIColor(Color.gold).cgColor
+    shapeLayer.lineWidth = 2
+    shapeLayer.fillColor = UIColor.clear.cgColor
+
+    return shapeLayer
+}
+```
+
+<Note>
+  Gold-colored outlines are drawn around detected eyes to provide visual confirmation that face tracking is active.
+</Note>
+
+## Performance Optimization
+
+<CardGroup cols={2}>
+  <Card title="Frame Throttling" icon="gauge">
+    Process only every 3rd frame to reduce CPU usage while maintaining responsive detection.
+  </Card>
+  <Card title="Largest Face" icon="user">
+    When multiple faces are detected, only the largest face is processed to improve performance.
+  </Card>
+  <Card title="Background Queue" icon="microchip">
+    Video processing runs on a dedicated background queue to keep the UI responsive.
+  </Card>
+  <Card title="Weak Self" icon="shield">
+    Uses `[weak self]` in closures to prevent memory leaks and retain cycles.
+  </Card>
+</CardGroup>
+
+## Session Lifecycle
+
+```swift ~/workspace/source/ReforestationSaga/EyeBlinkDetectorVision.swift
+func stopSession() {
+    session.stopRunning()
+}
+```
+
+<Warning>
+  Always call `stopSession()` when dismissing the camera view to properly release camera resources and prevent battery drain.
+</Warning>
+
+## Integration with Game
+
+The blink detector integrates with the game through SwiftUI's `onChange` modifier:
+
+```swift ~/workspace/source/ReforestationSaga/Game/GameView.swift
+.onChange(of: detector.blinkCount) {
+    if showInitialBlinkAlert {
+        showInitialBlinkAlert = false
+        hasPlantedFirstTree = true
+        if (treesRemaining > 0) {
+            scene?.shootNeedle()
+        }
+    } else if !showMissionFailedPopup && !showLevelClearPopup {
+        scene?.shootNeedle()
+    }
+}
+```
+
+Each blink increment triggers the `shootNeedle()` function, planting a tree in the game world.

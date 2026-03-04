@@ -1,80 +1,436 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get started with Reforestation Saga and plant your first trees in minutes'
 ---
 
-## Get started in three steps
+## Welcome to Reforestation Saga
 
-Get your documentation site running locally and make your first customization.
+Reforestation Saga is an innovative iOS game that uses eye-blink detection to plant trees and save planets from environmental collapse. Join the **Intergalactic Reforestation Unit** and embark on your mission to restore life across the galaxy.
 
-### Step 1: Set up your local environment
+<Info>
+This game requires camera access to detect your eye blinks, which serve as the primary control mechanism for planting trees.
+</Info>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Understanding the Game Concept
+
+In Reforestation Saga, you play as a cadet in an intergalactic organization dedicated to saving planets in crisis. Your mission is to plant trees on rotating planets by blinking your eyes at the right moment. The game combines:
+
+- **Eye-blink detection** as the core control mechanism
+- **Rotating planet mechanics** that increase in difficulty
+- **Progressive level system** with dynamic objectives
+- **Real-time camera processing** using Vision framework
+
+The app initializes with the blink detector as a global environment object:
+
+```swift ReforestationSaga_App.swift
+@main
+struct ReforestationSaga_App: App {
+    @StateObject private var detector = EyeBlinkDetectorVision()
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environmentObject(detector)
+        }
+    }
+}
+```
+
+## First Launch Experience
+
+<Steps>
+  <Step title="Launch the App">
+    When you first launch Reforestation Saga, you'll see the home screen with the Earth display and the game title.
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    The game loads with background music and displays your highest level progress:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```swift HomeView.swift
+    ZStack {
+        Image("box")
+            .resizable()
+            .frame(width: 140, height: 40)
+        Text("Highest Level: \(gameData.highestLevel)")
+            .font(Font.custom("Gugi", size: 14))
+            .multilineTextAlignment(.center)
+            .foregroundColor(Color(red: 0.94, green: 0.84, blue: 0.65))
+            .padding(.bottom, 8)
+    }
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Tip>
+    The game automatically saves your highest level using UserDefaults, so your progress is preserved between sessions.
+    </Tip>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Tap to Begin">
+    Tap anywhere on the screen to reveal the mission briefing. The interface animates smoothly to show your quest:
+    
+    ```swift HomeView.swift
+    .onTapGesture {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            QuestView = true
+        }
+    }
+    ```
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Read the Mission Briefing">
+    The quest box appears with your introduction to the Intergalactic Reforestation Unit:
+    
+    > "Welcome aboard, Cadet! You've arrived at **Intergalactic Reforestation Unit**, stationed on the edge of the exosphere. We aim to help planets in crisis, overheating, choking on carbon, and/or running out of time."
+    
+    Before you can start your mission, you need to verify your identity.
+  </Step>
+</Steps>
 
-### Step 3: Go live
+## Camera Permission Setup
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Warning>
+Camera access is required to play Reforestation Saga. The game uses Apple's Vision framework to detect eye blinks in real-time.
+</Warning>
 
-## Next steps
+### Identity Verification Flow
 
-Now that you have your docs running, explore these key features:
+The game requests camera permission through an identity verification narrative:
+
+```swift HomeView.swift
+Text("But before we brief you, ")
+    .font(Font.custom("Genos", size: 17))
+    + Text("we need to verify your identity")
+    .font(Font.custom("Genos-bold", size: 17))
+    + Text(". Please align your face with the scanner.")
+    .font(Font.custom("Genos", size: 17))
+```
+
+<Steps>
+  <Step title="Tap Verify Button">
+    Tap the "Verify" button to navigate to the camera check screen:
+    
+    ```swift HomeView.swift
+    NavigationLink(destination: CameraCheckView()) {
+        Image("verifybutton")
+            .resizable()
+            .frame(width: 95, height: 44)
+    }
+    ```
+  </Step>
+
+  <Step title="Grant Camera Permission">
+    When prompted by iOS, tap "OK" or "Allow" to grant camera access. The app uses the camera exclusively for eye-blink detection.
+  </Step>
+
+  <Step title="Complete Face Scan">
+    Once the camera is active, the CameraCheckView monitors for your first blink:
+    
+    ```swift CameraCheckView.swift
+    .onChange(of: detector.blinkCount) {
+        if detector.blinkCount > 0 {
+            showAlert = true
+            GameMusicManager.shared.playSoundEffect(filename: "access-granted")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            navigateToNextPage = true
+        }
+    }
+    ```
+    
+    <Note>
+    Blink naturally to complete the verification. The detector is highly sensitive and will catch normal blinks.
+    </Note>
+  </Step>
+
+  <Step title="Access Granted">
+    After successful verification, you'll see the "Access Granted" popup and automatically proceed to the mission briefing.
+  </Step>
+</Steps>
+
+## Starting Your First Mission
+
+After completing verification and reading the full mission briefing, you'll enter your first level:
+
+### Level Initialization
+
+Each level is dynamically configured based on difficulty:
+
+```swift GameView.swift
+func setupScene() {
+    let newTrees = treesForLevel(currentLevel)
+    self.treesNeeded = newTrees
+    let newScene = GameScene(size: UIScreen.main.bounds.size)
+    newScene.scaleMode = .resizeFill
+    
+    // Configure callbacks
+    newScene.onTreeHit = {
+        treesRemaining -= 1
+        if treesRemaining <= 0 {
+            showLevelClearPopup = true
+        }
+    }
+    
+    // Set rotation based on level
+    let rotationDuration: Double
+    let rotateLeft: Bool
+    
+    switch currentLevel {
+    case 1...5:
+        rotationDuration = 4
+        rotateLeft = false
+    case 6...10:
+        rotationDuration = 3
+        rotateLeft = Bool.random()
+    default:
+        rotationDuration = Double.random(in: 1.5...4)
+        rotateLeft = Bool.random()
+    }
+    
+    newScene.configureLevel(
+        treesNeeded: treesNeeded,
+        rotationDuration: rotationDuration,
+        rotateLeft: rotateLeft
+    )
+}
+```
+
+### Trees Required Per Level
+
+The number of trees you need to plant increases progressively:
+
+```swift GameView.swift
+func treesForLevel(_ level: Int) -> Int {
+    let base = 3
+    let cycle = (level - 1) / 5
+    let positionInCycle = (level - 1) % 5
+    return base + cycle + positionInCycle
+}
+```
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Levels 1-5" icon="seedling">
+    3-7 trees required, 4-second rotation, consistent direction
+  </Card>
+  <Card title="Levels 6-10" icon="tree">
+    8-12 trees required, 3-second rotation, random direction
+  </Card>
+  <Card title="Levels 11+" icon="trees">
+    13+ trees required, 1.5-4 second rotation (random), random direction
+  </Card>
+  <Card title="Progression" icon="chart-line">
+    Each 5-level cycle adds +1 to base tree count, increasing challenge
+  </Card>
 </CardGroup>
 
+## Basic Gameplay Controls
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+**The only control is blinking your eyes.** No buttons, no taps, just natural eye blinks.
 </Note>
+
+### How Blink Detection Works
+
+The game uses Vision framework to detect eye blinks in real-time through the front camera:
+
+```swift GameView.swift
+.onChange(of: detector.blinkCount) {
+    if showInitialBlinkAlert {
+        showInitialBlinkAlert = false
+        hasPlantedFirstTree = true
+        if (treesRemaining > 0) {
+            scene?.shootNeedle()
+        }
+    } else if !showMissionFailedPopup && !showLevelClearPopup {
+        scene?.shootNeedle()
+    }
+}
+```
+
+### First Blink Tutorial
+
+When you start your first level, you'll see a blink alert overlay:
+
+```swift GameView.swift
+if showInitialBlinkAlert {
+    BlinkAlert()
+        .transition(.opacity)
+        .zIndex(3)
+        .padding(.top, 220)
+}
+```
+
+<Steps>
+  <Step title="Read the Alert">
+    The initial alert explains that you should blink to plant trees.
+  </Step>
+
+  <Step title="Blink to Dismiss">
+    Your first blink will dismiss the alert and shoot your first needle.
+  </Step>
+
+  <Step title="Continue Blinking">
+    Each subsequent blink shoots a needle toward the planet. Time your blinks to hit the green zones!
+  </Step>
+</Steps>
+
+## Understanding Level Objectives
+
+### HUD Elements
+
+The game displays key information at the top of the screen:
+
+```swift GameView.swift
+VStack {
+    HStack {
+        // Left: Trees remaining progress bar
+        BarView(
+            treesRemaining: treesRemaining,
+            totalPollution: treesNeeded)
+
+        Spacer()
+
+        // Right: Current level and sound toggle
+        LevelSoundView(
+            isMuted: $isMuted,
+            currentLevel: currentLevel,
+            scene: scene
+        )
+    }
+    .padding(.horizontal, 20)
+    
+    Spacer()
+}
+```
+
+<Accordion title="What each HUD element means">
+  - **Trees Remaining Bar (Left)**: Shows how many more trees you need to plant to complete the level
+  - **Level Number (Right)**: Displays your current level
+  - **Sound Toggle (Right)**: Mute/unmute game music and sound effects
+</Accordion>
+
+### Win Condition
+
+To complete a level, plant all required trees in the green zones:
+
+```swift GameView.swift
+newScene.onTreeHit = {
+    treesRemaining -= 1
+    if treesRemaining <= 0 {
+        showLevelClearPopup = true
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            showLevelClearPopup = false
+            currentLevel += 1
+            
+            if currentLevel - 1 > gameData.highestLevel {
+                gameData.highestLevel = currentLevel - 1
+                UserDefaults.standard.savedHighestLevel = gameData.highestLevel
+            }
+            setupScene()
+        }
+    }
+}
+```
+
+### Fail Conditions
+
+You'll fail the mission if your needle hits:
+
+1. **Blue water zones** (ocean areas)
+2. **Existing trees** (areas already reforested)
+
+```swift GameView.swift
+newScene.onFailZoneHit = {
+    showMissionFailedPopup = true
+}
+newScene.onTreeZoneHit = {
+    reason = "pohon"
+    showMissionFailedPopup = true
+}
+```
+
+<Warning>
+When you fail a mission, you'll restart from Level 1, but your highest level record is preserved!
+</Warning>
+
+## Tips for Success
+
+<CardGroup cols={2}>
+  <Card title="Time Your Blinks" icon="clock">
+    Watch the planet rotation and blink when green zones align with your trajectory. Don't rush!
+  </Card>
+  
+  <Card title="Stay Centered" icon="crosshairs">
+    Keep your face centered in the camera frame for consistent blink detection.
+  </Card>
+  
+  <Card title="Natural Blinks Only" icon="eye">
+    Blink naturally. Forced or exaggerated blinks aren't necessary and may be less reliable.
+  </Card>
+  
+  <Card title="Manage Screen Time" icon="mobile">
+    The game prevents screen auto-lock during gameplay, but take breaks to rest your eyes.
+  </Card>
+  
+  <Card title="Learn Rotation Patterns" icon="rotate">
+    Early levels rotate predictably. Later levels randomize direction and speed.
+  </Card>
+  
+  <Card title="Track Your Progress" icon="trophy">
+    Your highest level is saved automatically and displayed on the home screen.
+  </Card>
+</CardGroup>
+
+### Advanced Techniques
+
+<Accordion title="Adapting to Random Rotations (Levels 6+)">
+At level 6, the planet's rotation direction becomes random. Quick tips:
+
+- Observe the direction for 1-2 rotations before shooting
+- Green zones pass more frequently with 3-second rotation
+- Stay patient and wait for optimal alignment
+</Accordion>
+
+<Accordion title="Handling Variable Speed (Levels 11+)">
+From level 11 onwards, rotation duration randomizes between 1.5-4 seconds:
+
+```swift GameView.swift
+default:
+    rotationDuration = Double.random(in: 1.5...4)
+    rotateLeft = Bool.random()
+```
+
+- Fast rotations (1.5s): Blink quickly when zones appear
+- Slow rotations (4s): More time to aim, but requires patience
+- Adapt your timing to each level's unique speed
+</Accordion>
+
+<Accordion title="Maximizing Your High Score">
+To achieve the highest levels:
+
+1. **Start strong**: Clear levels 1-5 quickly to build momentum
+2. **Stay focused**: One mistake sends you back to level 1
+3. **Rest between sessions**: Tired eyes = less accurate blinks
+4. **Perfect your timing**: Aim for the center of green zones
+5. **Stay calm**: Rushed blinks often miss the target
+</Accordion>
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Game Architecture" icon="diagram-project" href="/technical/architecture-overview">
+    Learn how the Vision framework powers blink detection
+  </Card>
+  
+  <Card title="SpriteKit Integration" icon="gamepad" href="/technical/swiftui-spritekit-integration">
+    Explore the rotating planet mechanics and collision detection
+  </Card>
+  
+  <Card title="State Management" icon="database" href="/technical/user-data-persistence">
+    Understand how progress and levels are tracked
+  </Card>
+  
+  <Card title="Audio System" icon="volume-high" href="/features/audio-system">
+    Discover the music and sound effect implementation
+  </Card>
+</CardGroup>
+
+---
+
+Ready to save some planets? Launch Reforestation Saga and start your mission!

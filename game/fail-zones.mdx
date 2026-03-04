@@ -1,0 +1,333 @@
+---
+title: 'Fail Zones'
+description: 'Learn how ocean areas (fail zones) are implemented using arc paths, collision detection, and visual feedback for failed tree placement'
+---
+
+## Overview
+
+Fail zones represent ocean areas on the planet where trees cannot be planted. These zones are implemented as invisible arc-shaped regions that trigger mission failure when hit.
+
+## Arc Path Setup
+
+Fail zones are created using `UIBezierPath` arcs that define specific angular segments on the planet's surface.
+
+```swift GameScene.swift
+private func arcPath(
+    radius: CGFloat, startAngle: CGFloat, endAngle: CGFloat
+) -> UIBezierPath {
+    let arcPath = UIBezierPath()
+    arcPath.move(to: .zero)
+    arcPath.addArc(
+        withCenter: .zero, radius: radius, startAngle: startAngle,
+        endAngle: endAngle, clockwise: true)
+    arcPath.close()
+
+    return arcPath
+}
+```
+
+<Accordion title="Arc Path Parameters">
+  - **radius**: Distance from planet center (300 for all fail zones)
+  - **startAngle**: Starting angle in radians for the arc segment
+  - **endAngle**: Ending angle in radians for the arc segment
+  - **clockwise**: Direction of arc drawing (always true)
+  
+  The path starts at center (0,0), draws an arc, then closes back to center, creating a pie-slice shape.
+</Accordion>
+
+## Creating Fail Zones
+
+Multiple fail zones are created at different angles to represent various ocean regions.
+
+```swift GameScene.swift
+func setForbiddenArea() {
+
+    // FIRST ZONE
+    var failZone = SKShapeNode(
+        path: arcPath(radius: 300, startAngle: 6, endAngle: 6.97).cgPath)
+
+    failZone.strokeColor = .clear
+    failZone.position = CGPoint(x: 0, y: 0)  // relative to circle center
+    failZone.name = "failZone-1"
+    circle.addChild(failZone)
+
+    // SECOND ZONE
+    failZone = SKShapeNode(
+        path: arcPath(radius: 300, startAngle: 3.96, endAngle: 5.30).cgPath)
+
+    failZone.strokeColor = .clear
+    failZone.name = "failZone-2"
+    circle.addChild(failZone)
+
+    // THIRD ZONE
+    failZone = SKShapeNode(
+        path: arcPath(radius: 300, startAngle: 4.73, endAngle: 4.88).cgPath)
+
+    failZone.strokeColor = .clear
+    failZone.zRotation = 45
+    failZone.name = "failZone-3"
+    circle.addChild(failZone)
+
+    // FOURTH ZONE
+    failZone = SKShapeNode(
+        path: arcPath(radius: 300, startAngle: 1.62, endAngle: 1.76).cgPath)
+    failZone.strokeColor = .clear
+    failZone.zRotation = 1
+    failZone.name = "failZone-4"
+    circle.addChild(failZone)
+}
+```
+
+<Steps>
+  <Step title="Create Shape Node">
+    Generate `SKShapeNode` with arc path defining the ocean region
+  </Step>
+  
+  <Step title="Make Invisible">
+    Set `strokeColor` to clear so zone is invisible to player
+  </Step>
+  
+  <Step title="Position & Name">
+    Set position relative to circle and assign unique name for detection
+  </Step>
+  
+  <Step title="Add to Circle">
+    Add as child of circle so it rotates with the planet
+  </Step>
+</Steps>
+
+## Fail Zone Configuration
+
+<CardGroup cols={2}>
+  <Card title="Fail Zone 1" icon="water">
+    **Angle**: 6 → 6.97 radians
+    **Rotation**: 0°
+    **Size**: Large ocean region
+  </Card>
+  
+  <Card title="Fail Zone 2" icon="water">
+    **Angle**: 3.96 → 5.30 radians
+    **Rotation**: 0°
+    **Size**: Medium ocean region
+  </Card>
+  
+  <Card title="Fail Zone 3" icon="water">
+    **Angle**: 4.73 → 4.88 radians
+    **Rotation**: 45°
+    **Size**: Small ocean region
+  </Card>
+  
+  <Card title="Fail Zone 4" icon="water">
+    **Angle**: 1.62 → 1.76 radians
+    **Rotation**: 1°
+    **Size**: Small ocean region
+  </Card>
+</CardGroup>
+
+<Info>
+Some fail zones have additional `zRotation` applied to position them at specific locations on the planet.
+</Info>
+
+## Collision Detection
+
+When a tree needle lands, the game checks if it intersects any fail zone.
+
+```swift GameScene.swift
+let relativePosition = self.convert(
+    needle.position,
+    to: self.needleContainer
+)
+
+// Check if in fail zone
+let failZoneNames = [
+    "failZone-1", "failZone-2", "failZone-3", "failZone-4",
+]
+
+for zoneName in failZoneNames {
+    if let failZone = self.circle.childNode(withName: zoneName),
+        failZone.contains(relativePosition)
+    {
+        let splash = SKSpriteNode(imageNamed: "splash")
+        splash.position = CGPoint(
+            x: needle.position.x,
+            y: needle.position.y - 15
+        )
+        splash.setScale(0.11)
+        self.addChild(splash)
+
+        needle.removeAllChildren()
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        self.isFail = true
+        self.onFailZoneHit?()
+        return
+    }
+}
+```
+
+<Steps>
+  <Step title="Convert Coordinates">
+    Transform needle position to needleContainer coordinate space
+  </Step>
+  
+  <Step title="Iterate Zones">
+    Check each fail zone by name
+  </Step>
+  
+  <Step title="Contains Check">
+    Use `contains()` to test if point is inside zone shape
+  </Step>
+  
+  <Step title="Trigger Failure">
+    Show splash effect, vibrate, and call failure callback
+  </Step>
+</Steps>
+
+## Splash Effect
+
+When a tree hits the ocean, a splash sprite appears at the impact location.
+
+```swift GameScene.swift
+let splash = SKSpriteNode(imageNamed: "splash")
+splash.position = CGPoint(
+    x: needle.position.x,
+    y: needle.position.y - 15
+)
+splash.setScale(0.11)
+self.addChild(splash)
+```
+
+<Tip>
+The splash is positioned 15 points below the needle position and scaled to 11% of original size for proper visual proportions.
+</Tip>
+
+## Haptic Feedback
+
+Both fail zone hits and tree-to-tree collisions trigger device vibration.
+
+```swift GameScene.swift
+import AudioToolbox
+
+// Trigger haptic feedback
+AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+```
+
+<Warning>
+`kSystemSoundID_Vibrate` only works on physical iOS devices, not in the simulator.
+</Warning>
+
+## Failure State Management
+
+The `isFail` flag prevents additional trees from being planted after mission failure.
+
+```swift GameScene.swift
+var isFail: Bool = false
+
+func shootNeedle() {
+    guard remainingTrees > 0 else { return }
+    guard isFail == false else { return }  // Prevent shooting after failure
+    // ... rest of shooting logic
+}
+```
+
+## Failure Callback
+
+The scene communicates failures back to the view through closure callbacks.
+
+```swift GameView.swift
+newScene.onFailZoneHit = {
+    showMissionFailedPopup = true
+}
+
+newScene.onTreeZoneHit = {
+    reason = "pohon"
+    showMissionFailedPopup = true
+}
+```
+
+<Accordion title="Failure Reasons">
+  - **"laut"** (ocean): Tree hit a fail zone
+  - **"pohon"** (tree): Tree hit another tree
+  
+  The reason determines the failure message shown to the player.
+</Accordion>
+
+## Visual Feedback Sequence
+
+When a tree hits ocean:
+
+<Steps>
+  <Step title="Collision Detected">
+    `failZone.contains(relativePosition)` returns true
+  </Step>
+  
+  <Step title="Splash Appears">
+    Splash sprite shown at impact location
+  </Step>
+  
+  <Step title="Haptic Vibration">
+    Device vibrates to alert player
+  </Step>
+  
+  <Step title="Sound Effect">
+    Water sound plays (handled in GameView)
+  </Step>
+  
+  <Step title="Popup Displays">
+    Mission failed popup appears with "Tree floats away" message
+  </Step>
+</Steps>
+
+## Fail Zone Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `path` | CGPath | Arc path defining zone shape |
+| `strokeColor` | UIColor | Set to clear (invisible) |
+| `position` | CGPoint | (0,0) relative to circle center |
+| `name` | String | Unique identifier (failZone-1 to 4) |
+| `zRotation` | CGFloat | Additional rotation for positioning |
+
+## Sound Integration
+
+Fail zone hits trigger specific sound effects through the game view.
+
+```swift GameView.swift
+.onChange(of: showMissionFailedPopup) { newValue in
+    if newValue {
+        pauseGame()
+        let soundEffectName: String = reason == "laut" ? "water" : "failed"
+        GameMusicManager.shared.playSoundEffect(filename: soundEffectName)
+        GameMusicManager.shared.pauseMusic()
+    } else {
+        resumeGame()
+        GameMusicManager.shared.resumeMusic()
+    }
+}
+```
+
+## Debugging Fail Zones
+
+To visualize fail zones during development, change the stroke color:
+
+```swift
+// For debugging - make zones visible
+failZone.strokeColor = .red
+failZone.lineWidth = 2
+
+// For production - make zones invisible
+failZone.strokeColor = .clear
+```
+
+<Note>
+Fail zones rotate with the planet since they are children of the circle node, creating dynamic challenge as ocean positions constantly shift.
+</Note>
+
+## Best Practices
+
+- Make fail zones invisible (clear stroke color) for clean visual presentation
+- Add fail zones as children of circle so they rotate with planet
+- Use descriptive names (failZone-1, failZone-2, etc.) for easy iteration
+- Convert coordinates to needleContainer space for accurate collision detection
+- Provide multi-sensory feedback (visual splash + haptic + sound) for failures
+- Set `isFail` flag immediately to prevent additional tree planting
+- Position splash slightly below needle for natural visual effect

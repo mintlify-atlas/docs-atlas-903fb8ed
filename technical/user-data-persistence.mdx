@@ -1,0 +1,343 @@
+---
+title: "User Data Persistence"
+description: "UserDefaults-based persistence system for saving game progress, high scores, and user preferences"
+---
+
+## Overview
+
+Reforestation Saga implements a lightweight persistence layer using UserDefaults to save player progress across app launches. The system combines a UserDefaults extension for type-safe storage with an ObservableObject for reactive state management in SwiftUI.
+
+## Architecture
+
+<CardGroup cols={2}>
+  <Card title="UserDefaults Extension" icon="gear">
+    Type-safe property wrappers for persistent storage
+  </Card>
+  
+  <Card title="GameData ObservableObject" icon="cloud">
+    Published properties that sync with UserDefaults
+  </Card>
+  
+  <Card title="SwiftUI Integration" icon="mobile">
+    Environment object pattern for app-wide access
+  </Card>
+  
+  <Card title="Automatic Persistence" icon="floppy-disk">
+    Save progress immediately when milestones are reached
+  </Card>
+</CardGroup>
+
+## UserDefaults Extension
+
+The app extends UserDefaults with computed properties for type-safe access to persisted values.
+
+```swift GameView.swift:282-291
+extension UserDefaults {
+    private enum Keys {
+        static let highestLevel = "highestLevel"
+    }
+
+    var savedHighestLevel: Int {
+        get { integer(forKey: Keys.highestLevel) }
+        set { set(newValue, forKey: Keys.highestLevel) }
+    }
+}
+```
+
+<Accordion title="Why Use an Extension?">
+  Extending UserDefaults provides several benefits:
+  
+  - **Type Safety**: The compiler enforces Int type instead of allowing any value
+  - **Key Management**: Centralized key definitions prevent typos
+  - **Encapsulation**: Hide UserDefaults implementation details from the rest of the app
+  - **Convenience**: Use property syntax instead of verbose method calls
+  
+  Compare:
+  ```swift
+  // Without extension
+  let level = UserDefaults.standard.integer(forKey: "highestLevel")
+  UserDefaults.standard.set(newLevel, forKey: "highestLevel")
+  
+  // With extension
+  let level = UserDefaults.standard.savedHighestLevel
+  UserDefaults.standard.savedHighestLevel = newLevel
+  ```
+</Accordion>
+
+### Private Keys Enum
+
+The `Keys` enum centralizes all UserDefaults key strings in one location.
+
+```swift GameView.swift:283-285
+private enum Keys {
+    static let highestLevel = "highestLevel"
+}
+```
+
+<Note>
+Using a private enum prevents instantiation and serves purely as a namespace for string constants. This pattern is preferred over scattered string literals.
+</Note>
+
+## GameData ObservableObject
+
+The `GameData` class bridges UserDefaults with SwiftUI's reactive system.
+
+```swift ContentView.swift:10-12
+class GameData: ObservableObject {
+    @Published var highestLevel: Int = UserDefaults.standard.savedHighestLevel
+}
+```
+
+<Steps>
+  <Step title="Conform to ObservableObject">
+    Allows SwiftUI views to automatically re-render when the data changes.
+  </Step>
+  
+  <Step title="Mark Properties with @Published">
+    Any change to `highestLevel` triggers view updates for all observers.
+  </Step>
+  
+  <Step title="Initialize from UserDefaults">
+    Load the saved value when the object is created, defaulting to 0 if no value exists.
+  </Step>
+</Steps>
+
+<Info>
+The `@Published` property wrapper automatically calls `objectWillChange.send()` before the property changes, notifying all SwiftUI views that observe this object.
+</Info>
+
+## SwiftUI Integration
+
+### Creating the Shared Instance
+
+The GameData object is created at the app's root level using `@StateObject`.
+
+```swift ContentView.swift:14-21
+struct ContentView: View {
+    @StateObject private var gameData = GameData()
+    
+    var body: some View {
+        HomeView()
+            .environmentObject(gameData)
+    }
+}
+```
+
+<Warning>
+Always use `@StateObject` (not `@ObservedObject`) when creating the initial instance. `@StateObject` ensures the object survives view re-renders, while `@ObservedObject` would recreate it.
+</Warning>
+
+### Accessing Across Views
+
+Child views access the shared GameData through `@EnvironmentObject`.
+
+```swift GameView.swift:18
+@EnvironmentObject var gameData: GameData
+```
+
+This pattern allows any view in the hierarchy to read and modify the game data without explicit passing through every intermediate view.
+
+## Persistence Patterns
+
+### Reading Saved Data
+
+Load the highest level when the game starts or needs to display it.
+
+```swift GameView.swift:180-181
+currentLevel = 1
+gameData.highestLevel = UserDefaults.standard.savedHighestLevel
+```
+
+### Writing on Progress
+
+Save the highest level immediately when the player surpasses their previous record.
+
+```swift GameView.swift:75-79
+if currentLevel - 1 > gameData.highestLevel {
+    gameData.highestLevel = currentLevel - 1
+    UserDefaults.standard.savedHighestLevel =
+        gameData.highestLevel
+}
+```
+
+<Accordion title="Why Update Both GameData and UserDefaults?">
+  The code updates both locations for different purposes:
+  
+  1. **`gameData.highestLevel`**: Updates the in-memory @Published property, triggering SwiftUI view updates immediately
+  2. **`UserDefaults.standard.savedHighestLevel`**: Persists the value to disk for future app launches
+  
+  This two-step process ensures:
+  - Immediate UI feedback (via @Published)
+  - Persistent storage (via UserDefaults)
+  
+  The separation exists because GameData initializes from UserDefaults but doesn't automatically sync back to it.
+</Accordion>
+
+### Automatic Persistence Timing
+
+The app saves progress at strategic moments:
+
+1. **Level Completion**: When advancing to the next level
+2. **New High Score**: Only when surpassing the previous record
+3. **Mission Failed**: When resetting, load the saved highest level
+
+```swift GameView.swift:65-82
+scene.onTreeHit = {
+    treesRemaining -= 1
+    if treesRemaining <= 0 {
+        showLevelClearPopup = true
+
+        // After popup shows for 1.2 seconds, continue to next level
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            showLevelClearPopup = false
+            currentLevel += 1
+
+            if currentLevel - 1 > gameData.highestLevel {
+                gameData.highestLevel = currentLevel - 1
+                UserDefaults.standard.savedHighestLevel =
+                    gameData.highestLevel
+            }
+            setupScene()
+        }
+    }
+}
+```
+
+<Note>
+The `currentLevel - 1` calculation accounts for the fact that the player just completed the previous level, not the incremented current level.
+</Note>
+
+## Data Flow Diagram
+
+```
+┌─────────────────┐
+│   App Launch    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────────────────────┐
+│  UserDefaults.savedHighestLevel │
+│  (Persistent Storage)           │
+└────────┬────────────────────────┘
+         │ Load on init
+         ▼
+┌─────────────────────────────────┐
+│  GameData.highestLevel          │
+│  (@Published ObservableObject)  │
+└────────┬────────────────────────┘
+         │ EnvironmentObject
+         ▼
+┌─────────────────────────────────┐
+│  GameView / Other Views         │
+│  (Read & Update)                │
+└────────┬────────────────────────┘
+         │ On high score
+         ▼
+┌─────────────────────────────────┐
+│  UserDefaults.savedHighestLevel │
+│  (Persist New Value)            │
+└─────────────────────────────────┘
+```
+
+## Default Values
+
+UserDefaults automatically returns default values for missing keys:
+
+- `integer(forKey:)` returns `0` if the key doesn't exist
+- `bool(forKey:)` returns `false` if the key doesn't exist
+- `string(forKey:)` returns `nil` if the key doesn't exist
+
+```swift
+// First app launch - no data saved yet
+let level = UserDefaults.standard.savedHighestLevel
+// Returns: 0 (default for missing Int)
+```
+
+<Info>
+This behavior means the app works correctly on first launch without requiring explicit initialization or migration code.
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep Keys Private" icon="lock">
+    Use a private enum to encapsulate UserDefaults keys and prevent external access.
+  </Card>
+  
+  <Card title="Type-Safe Extensions" icon="shield">
+    Create computed properties on UserDefaults for type safety and convenience.
+  </Card>
+  
+  <Card title="Single Source of Truth" icon="database">
+    Use @Published ObservableObject as the app's runtime data source.
+  </Card>
+  
+  <Card title="Sync Both Layers" icon="arrows-rotate">
+    Update both the ObservableObject and UserDefaults when values change.
+  </Card>
+</CardGroup>
+
+## Potential Extensions
+
+The current persistence system can be extended to support additional features:
+
+<Steps>
+  <Step title="Add More Properties">
+    Extend the Keys enum and GameData class to persist settings like sound preferences, difficulty modes, or unlocked features.
+    
+    ```swift
+    private enum Keys {
+        static let highestLevel = "highestLevel"
+        static let soundEnabled = "soundEnabled"
+        static let totalTreesPlanted = "totalTreesPlanted"
+    }
+    ```
+  </Step>
+  
+  <Step title="Implement Codable Models">
+    For complex data structures, use Codable to serialize objects to UserDefaults.
+    
+    ```swift
+    struct PlayerStats: Codable {
+        var highestLevel: Int
+        var totalTreesPlanted: Int
+        var achievements: [String]
+    }
+    ```
+  </Step>
+  
+  <Step title="Add iCloud Sync">
+    Migrate from UserDefaults to NSUbiquitousKeyValueStore for cross-device sync.
+  </Step>
+  
+  <Step title="Implement Migration">
+    Add version tracking to handle schema changes when updating data structures.
+  </Step>
+</Steps>
+
+## Testing Considerations
+
+<Warning>
+UserDefaults persists between test runs. Always reset UserDefaults in `setUp()` or use a separate suite name for unit tests.
+</Warning>
+
+```swift
+// Test setup
+override func setUp() {
+    super.setUp()
+    UserDefaults.standard.removePersistentDomain(
+        forName: Bundle.main.bundleIdentifier!)
+}
+```
+
+## Related Systems
+
+<CardGroup cols={2}>
+  <Card title="Game Scene" href="/technical/game-scene" icon="gamepad">
+    See how the game scene triggers persistence when levels are completed
+  </Card>
+  
+  <Card title="Eye Tracking" href="/technical/eye-tracking" icon="eye">
+    Learn about the blink detection system that drives gameplay
+  </Card>
+</CardGroup>
