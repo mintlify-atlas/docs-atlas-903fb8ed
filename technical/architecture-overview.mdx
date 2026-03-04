@@ -76,13 +76,69 @@ The app follows a clear view hierarchy that separates concerns between navigatio
     ```
   </Step>
 
+  <Step title="CameraCheckView - Identity Verification">
+    Verifies user identity using eye-blink detection and navigates to MailView:
+
+    ```swift CameraCheckView.swift
+    struct CameraCheckView: View {
+        @EnvironmentObject var detector: EyeBlinkDetectorVision
+        @State private var showAlert = false
+        @State private var navigateToNextPage = false
+        
+        var body: some View {
+            ZStack(alignment: .bottom) {
+                CameraViewVision(eyeBlinkDetector: detector)
+                    .edgesIgnoringSafeArea(.all)
+                
+                if showAlert {
+                    AccessGrantedPopUp()
+                }
+            }
+            .navigationDestination(isPresented: $navigateToNextPage) {
+                MailView()
+            }
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="MailView - Mission Message">
+    Displays an email-style mission briefing before the intro scene:
+
+    ```swift MailView.swift
+    struct MailView: View {
+        @State private var navigateToGame = false
+        @State private var showCurrentView = true
+        @EnvironmentObject var gameData: GameData
+        
+        var body: some View {
+            ZStack(alignment: .top) {
+                Image("email")
+                    .resizable()
+                    .scaledToFit()
+                
+                Image("message")
+                    .resizable()
+                    .scaledToFit()
+                    .onTapGesture {
+                        performFadeTransition()
+                    }
+                
+                if navigateToGame {
+                    IntroView()
+                }
+            }
+        }
+    }
+    ```
+  </Step>
+
   <Step title="IntroView - Mission Briefing">
-    Transitional view with SpriteKit preview:
+    Shows mission details with animated SpriteKit scene (IntroScene):
 
     ```swift IntroView.swift
     struct IntroView: View {
         @State private var scene: IntroScene?
-        @State private var isMuted: Bool = false
         @State private var navToGame = false
         @EnvironmentObject var gameData: GameData
         
@@ -91,6 +147,14 @@ The app follows a clear view hierarchy that separates concerns between navigatio
                 if let scene = scene {
                     SpriteView(scene: scene, options: [.allowsTransparency])
                         .frame(width: 300, height: 600)
+                }
+                
+                Button(action: {
+                    navToGame = true
+                }) {
+                    Image("startMission")
+                        .resizable()
+                        .scaledToFit()
                 }
                 
                 NavigationLink(
@@ -229,8 +293,12 @@ NavigationStack {
     User navigates to `CameraCheckView` to verify camera permissions and face detection.
   </Step>
 
+  <Step title="Mission Message">
+    After successful verification, user sees `MailView` with an email-style mission briefing.
+  </Step>
+
   <Step title="Mission Briefing">
-    `IntroView` shows game preview with rotating Earth and mission start button.
+    `IntroView` shows detailed mission objectives with animated SpriteKit scene and mission start button.
   </Step>
 
   <Step title="Gameplay">

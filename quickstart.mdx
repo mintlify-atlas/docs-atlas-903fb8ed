@@ -139,13 +139,30 @@ Text("But before we brief you, ")
   </Step>
 
   <Step title="Access Granted">
-    After successful verification, you'll see the "Access Granted" popup and automatically proceed to the mission briefing.
+    After successful verification, you'll see the "Access Granted" popup with the message "Iris biometric match confirmed." The popup plays a confirmation sound effect and automatically dismisses after 2 seconds.
+  </Step>
+
+  <Step title="Mission Message">
+    You'll arrive at the MailView screen showing an email-style message. Tap the message to continue to the detailed mission briefing.
+    
+    ```swift MailView.swift
+    Image("message")
+        .resizable()
+        .scaledToFit()
+        .onTapGesture {
+            performFadeTransition()
+        }
+    ```
+  </Step>
+
+  <Step title="Mission Briefing">
+    IntroView displays your mission details with an animated Earth preview. Review the mission objectives and tap "Start Mission" when ready to begin gameplay.
   </Step>
 </Steps>
 
 ## Starting Your First Mission
 
-After completing verification and reading the full mission briefing, you'll enter your first level:
+After tapping "Start Mission" in the IntroView, you'll enter your first level:
 
 ### Level Initialization
 
