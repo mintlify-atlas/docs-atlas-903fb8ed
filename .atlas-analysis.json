@@ -1,0 +1,85 @@
+{
+  "projectType": "saas",
+  "projectName": "Reforestation Saga",
+  "projectDescription": "An iOS game that uses eye-blink detection through face tracking to plant trees on a rotating planet, promoting environmental awareness through interactive gameplay.",
+  "theme": "almond",
+  "primaryColor": "#F0D8A6",
+  "lightColor": "#F5E5C4",
+  "darkColor": "#C9A962",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/eye-blink-detection",
+              "features/game-mechanics",
+              "features/level-progression",
+              "features/audio-system"
+            ]
+          },
+          {
+            "group": "Game Elements",
+            "pages": [
+              "game/planet-mechanics",
+              "game/tree-planting",
+              "game/fail-zones",
+              "game/ui-components"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical Reference",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "technical/architecture-overview",
+              "technical/swiftui-spritekit-integration"
+            ]
+          },
+          {
+            "group": "Core Systems",
+            "pages": [
+              "technical/eye-tracking",
+              "technical/game-scene",
+              "technical/user-data-persistence"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Eye-blink detection using Vision framework for game controls",
+    "Rotating planet game mechanics with SpriteKit",
+    "Progressive difficulty with dynamic level configuration",
+    "Face tracking camera integration with front/back camera switching",
+    "Real-time Eye Aspect Ratio (EAR) calculation for blink detection",
+    "Background music and sound effects management",
+    "Persistent high score tracking with UserDefaults",
+    "Mission-based gameplay with success/failure states"
+  ],
+  "publicApiSurface": [
+    "ReforestationSaga_App (Main App Entry)",
+    "EyeBlinkDetectorVision (Face tracking and blink detection)",
+    "GameScene (SpriteKit game logic)",
+    "GameView (Main game interface)",
+    "HomeView (Landing page)",
+    "IntroView (Mission briefing screen)",
+    "CameraCheckView (Identity verification screen)",
+    "GameMusicManager (Audio management)",
+    "GameData (Persistent game state)",
+    "treesForLevel(_:) (Level configuration function)"
+  ]
+}
